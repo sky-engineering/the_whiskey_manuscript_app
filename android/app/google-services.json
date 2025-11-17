@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1021679491536",
+    "project_id": "the-whiskey-manuscript-app",
+    "storage_bucket": "the-whiskey-manuscript-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1021679491536:android:9b675717988f4cbebe01d5",
+        "android_client_info": {
+          "package_name": "com.whiskeymanuscript.the_whiskey_manuscript_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBY0J-xDX94yRX4GJbWsO5vKeNfOXmVacM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
