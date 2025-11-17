@@ -1,0 +1,81 @@
+workflows:
+  whiskey_manuscript_main:
+    name: The Whiskey Manuscript – Main
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        APP_ID: "com.whiskeymanuscript.thewhiskeymanuscriptapp"
+      groups:
+        - app_store_connect_whiskey
+
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - ~/.gradle
+        - ~/Library/Caches/CocoaPods
+
+    scripts:
+      - name: Show tool versions
+        script: |
+          flutter --version
+          dart --version
+
+      - name: Get Flutter dependencies
+        script: |
+          flutter pub get
+
+      - name: Run tests
+        script: |
+          flutter test
+
+      # ANDROID
+
+      - name: Build Android APK (release)
+        script: |
+          flutter build apk --release
+
+      - name: Build Android App Bundle (AAB) (release)
+        script: |
+          flutter build appbundle --release
+
+      # iOS (signed IPA for TestFlight)
+
+      - name: Build iOS IPA for TestFlight
+        script: |
+          if [ "$FCI_OS" = "macos" ]; then
+            flutter build ipa --release
+          else
+            echo "Skipping iOS build because this is not a macOS machine."
+          fi
+
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_API_KEY
+        key_id: $APP_STORE_CONNECT_KEY_ID
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+
+      email:
+        recipients:
+          - "jared.t.madsen@gmail.com"
+        notify:
+          success: true
+          failure: true
