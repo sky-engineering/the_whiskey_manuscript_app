@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn() && request.auth.uid == request.resource.data.userId;
+    }
+
+
+    function _commentCount(data) {
+      return (data.commentCount is number) ? data.commentCount : 0;
+    }
+
+    function isPostCommentInteraction() {
+      return isSignedIn()
+        && resource.data != null
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.imageUrl == resource.data.imageUrl
+        && request.resource.data.caption == resource.data.caption
+        && request.resource.data.timestamp == resource.data.timestamp
+        && request.resource.data.likeCount == resource.data.likeCount
+        && request.resource.data.likedBy == resource.data.likedBy
+        && request.resource.data.keys().hasOnly(['userId','email','imageUrl','caption','timestamp','likeCount','likedBy','commentCount','updatedAt'])
+        && request.resource.data.commentCount is number
+        && request.resource.data.commentCount == _commentCount(resource.data) + 1
+        && request.resource.data.updatedAt == request.time;
+    }
+    function isPostLikeInteraction() {
+      return isSignedIn()
+        && resource.data != null
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.imageUrl == resource.data.imageUrl
+        && request.resource.data.caption == resource.data.caption
+        && request.resource.data.timestamp == resource.data.timestamp
+        && request.resource.data.keys().hasOnly(['userId','email','imageUrl','caption','timestamp','likeCount','likedBy','commentCount','updatedAt'])
+        && request.resource.data.likeCount is number
+        && request.resource.data.commentCount == _commentCount(resource.data)
+        && request.resource.data.likedBy is list
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+
+      match /friends/{friendId} {
+        allow read, delete: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['userId','displayName','email','membershipLevel','addedAt'])
+          && request.resource.data.userId is string
+          && request.resource.data.displayName is string && request.resource.data.displayName.size() > 0
+          && (request.resource.data.email == null || request.resource.data.email is string)
+          && (request.resource.data.membershipLevel == null || request.resource.data.membershipLevel is string)
+          && request.resource.data.addedAt == request.time;
+      }
+    }
+
+    match /whiskeys/{whiskeyId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.keys().hasOnly([
+          'userId','userName','userEmail','membershipLevel','name','region','notes','style','createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.region is string && request.resource.data.notes is string
+        && request.resource.data.style is string
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    match /distilleries/{distilleryId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.keys().hasOnly([
+          'userId','userName','userEmail','membershipLevel','name','location','story','signaturePour','createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.location is string && request.resource.data.story is string
+        && request.resource.data.signaturePour is string
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    match /articles/{articleId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.keys().hasOnly([
+          'userId','userName','userEmail','membershipLevel','title','summary','link','category','createdAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() > 0
+        && request.resource.data.summary is string && request.resource.data.link is string
+        && request.resource.data.category is string
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    match /merch/{itemId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.keys().hasOnly([
+          'userId','userName','userEmail','membershipLevel','title','description','price','link','category','createdAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() > 0
+        && request.resource.data.description is string
+        && request.resource.data.price is number
+        && request.resource.data.link is string
+        && request.resource.data.category is string
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.keys().hasOnly([
+          'userId','title','location','details','date','createdAt'])
+        && request.resource.data.title is string && request.resource.data.title.size() > 0
+        && request.resource.data.location is string && request.resource.data.location.size() > 0
+        && request.resource.data.details is string
+        && request.resource.data.date is timestamp
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid == resource.data.fromUserId ||
+         request.auth.uid == resource.data.toUserId);
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.fromUserId
+        && request.resource.data.keys().hasOnly(['fromUserId','fromDisplayName','fromEmail','fromMembershipLevel','toUserId','toDisplayName','toEmail','toMembershipLevel','message','sentAt'])
+        && request.resource.data.fromUserId is string
+        && request.resource.data.fromDisplayName is string && request.resource.data.fromDisplayName.size() > 0
+        && (request.resource.data.fromEmail == null || request.resource.data.fromEmail is string)
+        && (request.resource.data.fromMembershipLevel == null || request.resource.data.fromMembershipLevel is string)
+        && request.resource.data.toUserId is string
+        && request.resource.data.toDisplayName is string && request.resource.data.toDisplayName.size() > 0
+        && (request.resource.data.toEmail == null || request.resource.data.toEmail is string)
+        && (request.resource.data.toMembershipLevel == null || request.resource.data.toMembershipLevel is string)
+        && request.resource.data.message is string && request.resource.data.message.size() > 0
+        && request.resource.data.sentAt == request.time;
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isOwner() &&
+        request.resource.data.keys().hasOnly(['userId','email','imageUrl','caption','timestamp','likeCount','likedBy','commentCount','updatedAt']) &&
+        request.resource.data.userId is string && request.resource.data.email is string &&
+        request.resource.data.imageUrl is string && request.resource.data.caption is string &&
+        request.resource.data.timestamp == request.time &&
+        request.resource.data.likeCount is number && request.resource.data.likeCount == 0 &&
+        request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+        request.resource.data.commentCount is number && request.resource.data.commentCount == 0 &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if (isSignedIn() && request.auth.uid == resource.data.userId)
+        || isPostLikeInteraction()
+        || isPostCommentInteraction();
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.auth.uid == request.resource.data.userId
+          && request.resource.data.postId == postId
+          && request.resource.data.keys().hasOnly(['postId','userId','userName','userEmail','membershipLevel','text','timestamp'])
+          && request.resource.data.userId is string
+          && request.resource.data.userName is string && request.resource.data.userName.size() > 0
+          && request.resource.data.userEmail is string
+          && (request.resource.data.membershipLevel is string || request.resource.data.membershipLevel == null)
+          && request.resource.data.text is string && request.resource.data.text.size() > 0
+          && request.resource.data.timestamp == request.time;
+        allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+      }
+    }
+  }
+}
