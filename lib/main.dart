@@ -778,21 +778,22 @@ class _SocialPageState extends State<SocialPage> {
         children: [
           avatar,
           const Spacer(),
-          IconButton(
+          _HeaderActionButton(
             tooltip: 'New Post',
             onPressed: _isPosting ? null : _uploadPost,
-            icon: _isPosting
+            child: _isPosting
                 ? const SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 30,
+                    height: 30,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.add_a_photo_rounded),
+                : const Icon(Icons.add, size: 30),
           ),
-          IconButton(
+          const SizedBox(width: 12),
+          _HeaderActionButton(
             tooltip: 'Search Members',
             onPressed: _openUserSearchDialog,
-            icon: const Icon(Icons.person_search_rounded),
+            child: const Icon(Icons.search_rounded, size: 30),
           ),
         ],
       ),
@@ -842,6 +843,46 @@ class _SocialPageState extends State<SocialPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _HeaderActionButton extends StatelessWidget {
+  const _HeaderActionButton({
+    required this.tooltip,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: onPressed == null
+              ? AppColors.leather.withValues(alpha: 0.2)
+              : AppColors.leather,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.center,
+        child: IconTheme.merge(
+          data: const IconThemeData(color: AppColors.onDark),
+          child: child,
+        ),
+      ),
+    );
+
+    return Tooltip(
+      message: tooltip,
+      child: button,
     );
   }
 }
