@@ -1138,6 +1138,7 @@ class _RelationshipList extends StatefulWidget {
 class _RelationshipListState extends State<_RelationshipList> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FriendService _friendService = FriendService();
   final Set<String> _pending = <String>{};
 
   bool get _isOwnProfile => _auth.currentUser?.uid == widget.userId;
@@ -1163,50 +1164,7 @@ class _RelationshipListState extends State<_RelationshipList> {
       final targetDisplayName =
           (targetData['displayName'] as String?)?.trim() ?? '';
       final targetEmail = (targetData['email'] as String?)?.trim();
-      final targetMembership = targetData['membershipLevel'] as String?;
-
-      final currentDoc =
-          await _firestore.collection('users').doc(current.uid).get();
-      final currentData = currentDoc.data() ?? const <String, dynamic>{};
-      final currentDisplayName =
-          (currentData['displayName'] as String?)?.trim() ?? '';
-      final currentEmail = (currentData['email'] as String?)?.trim();
-      final currentMembership = currentData['membershipLevel'] as String?;
-
-      final batch = _firestore.batch();
-      batch.set(
-        _firestore
-            .collection('users')
-            .doc(current.uid)
-            .collection('following')
-            .doc(targetId),
-        {
-          'userId': targetId,
-          'displayName': targetDisplayName.isNotEmpty
-              ? targetDisplayName
-              : (targetEmail ?? 'Member'),
-          'email': targetEmail,
-          'membershipLevel': targetMembership,
-          'addedAt': FieldValue.serverTimestamp(),
-        },
-      );
-      batch.set(
-        _firestore
-            .collection('users')
-            .doc(targetId)
-            .collection('followers')
-            .doc(current.uid),
-        {
-          'userId': current.uid,
-          'displayName': currentDisplayName.isNotEmpty
-              ? currentDisplayName
-              : (currentEmail ?? 'Member'),
-          'email': currentEmail,
-          'membershipLevel': currentMembership,
-          'addedAt': FieldValue.serverTimestamp(),
-        },
-      );
-      await batch.commit();
+      await _friendService.addFriend(targetId);
       final friendlyTargetName = targetDisplayName.isNotEmpty
           ? targetDisplayName
           : (targetEmail ?? 'member');
@@ -1228,22 +1186,7 @@ class _RelationshipListState extends State<_RelationshipList> {
     }
     setState(() => _pending.add(targetId));
     try {
-      final batch = _firestore.batch();
-      batch.delete(
-        _firestore
-            .collection('users')
-            .doc(current.uid)
-            .collection('following')
-            .doc(targetId),
-      );
-      batch.delete(
-        _firestore
-            .collection('users')
-            .doc(targetId)
-            .collection('followers')
-            .doc(current.uid),
-      );
-      await batch.commit();
+      await _friendService.removeFriend(targetId);
       _showSnack('Unfollowed.');
     } catch (e) {
       _showSnack('Could not update follow: $e');
