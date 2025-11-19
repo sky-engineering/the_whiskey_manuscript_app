@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -163,7 +163,14 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+
+  runZonedGuarded(
+    () => runApp(const MyApp()),
+    (error, stackTrace) {
+      debugPrint('Uncaught zone error: ');
+      debugPrint('');
+    },
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -6095,7 +6102,7 @@ class _DatabaseLinkButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              '�',
+              '•',
               style: TextStyle(
                 color: AppColors.darkGreen,
                 fontSize: 14,
@@ -7700,3 +7707,4 @@ class _PageLayout extends StatelessWidget {
     );
   }
 }
+
