@@ -167,8 +167,8 @@ Future<void> main() async {
   runZonedGuarded(
     () => runApp(const MyApp()),
     (error, stackTrace) {
-      debugPrint('Uncaught zone error: ');
-      debugPrint('');
+      debugPrint('Uncaught zone error: $error');
+      debugPrint('$stackTrace');
     },
   );
 }
@@ -7707,4 +7707,5 @@ class _PageLayout extends StatelessWidget {
     );
   }
 }
+
 
