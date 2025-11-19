@@ -2472,6 +2472,10 @@ class _PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedAuthor =
+        authorLabel.trim().isNotEmpty ? authorLabel.trim() : 'Whiskey User';
+    final likeTotal = likeCount ?? 0;
+    final commentTotal = commentCount ?? 0;
     final content = Padding(
       padding: const EdgeInsets.only(bottom: 28),
       child: Column(
@@ -2483,55 +2487,42 @@ class _PostCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              authorLabel,
-                              style: const TextStyle(
+                      Expanded(
+                        child: Text(
+                          resolvedAuthor,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.darkGreen,
+                          ),
+                        ),
+                      ),
+                      if (onAddFriend != null)
+                        GestureDetector(
+                          onTap: onAddFriend,
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.leather),
+                              color: Colors.transparent,
+                            ),
+                            child: const Text(
+                              'Follow',
+                              style: TextStyle(
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.darkGreen,
+                                color: AppColors.leather,
                               ),
                             ),
                           ),
-                          if (onAddFriend != null)
-                            GestureDetector(
-                              onTap: onAddFriend,
-                              child: Container(
-                                margin: const EdgeInsets.only(left: 12),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppColors.leather),
-                                  color: Colors.transparent,
-                                ),
-                                child: const Text(
-                                  'Follow',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.leather,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDate(timestamp),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.leatherDark,
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -2554,84 +2545,77 @@ class _PostCard extends StatelessWidget {
               width: double.infinity,
               height: 300,
             ),
-          if (caption.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Text(
-                caption,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                _buildReactionIcon(
+                  icon: isLiked == true ? Icons.favorite : Icons.favorite_border,
+                  color: isLiked == true
+                      ? AppColors.leather
+                      : AppColors.leatherDark,
+                  onPressed: onToggleLike,
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: onShowLikes,
+                  child: Text(
+                    '$likeTotal',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.leatherDark,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                _buildReactionIcon(
+                  icon: Icons.mode_comment_outlined,
+                  color: AppColors.leatherDark,
+                  onPressed: onOpenComments,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '$commentTotal',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.leatherDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: RichText(
+              text: TextSpan(
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   color: AppColors.darkGreen,
                 ),
-              ),
-            ),
-          if ((onToggleLike != null || likeCount != null) ||
-              onOpenComments != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Wrap(
-                spacing: 24,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  if (onToggleLike != null || likeCount != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (onToggleLike != null) ...[
-                          IconButton(
-                            onPressed: onToggleLike,
-                            icon: Icon(
-                              isLiked == true
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: isLiked == true
-                                  ? AppColors.leather
-                                  : AppColors.leatherDark,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        _LikeCountLabel(
-                          label: _formatLikeLabel(likeCount ?? 0),
-                          onTap: onShowLikes,
-                        ),
-                      ],
-                    ),
-                  if (onOpenComments != null)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: onOpenComments,
-                          icon: const Icon(
-                            Icons.mode_comment_outlined,
-                            color: AppColors.leatherDark,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: onOpenComments,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 6,
-                              horizontal: 4,
-                            ),
-                            child: Text(
-                              _formatCommentLabel(commentCount ?? 0),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: AppColors.leatherDark,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                  TextSpan(
+                    text: '$resolvedAuthor ' ,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (caption.isNotEmpty)
+                    TextSpan(
+                      text: caption,
+                      style: const TextStyle(fontWeight: FontWeight.normal),
                     ),
                 ],
               ),
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Text(
+              _formatDate(timestamp),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.leatherDark,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2649,39 +2633,17 @@ class _PostCard extends StatelessWidget {
 
   static String _formatDate(DateTime timestamp) =>
       '${timestamp.month}/${timestamp.day}/${timestamp.year}';
-
-  static String _formatLikeLabel(int count) =>
-      '$count ${count == 1 ? 'like' : 'likes'}';
-
-  static String _formatCommentLabel(int count) =>
-      '$count ${count == 1 ? 'comment' : 'comments'}';
-}
-
-class _LikeCountLabel extends StatelessWidget {
-  const _LikeCountLabel({required this.label, this.onTap});
-
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Text(
-      label,
-      style: const TextStyle(
-        fontSize: 14,
-        color: AppColors.leatherDark,
-      ),
-    );
-
-    if (onTap == null) return text;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        child: text,
-      ),
+  Widget _buildReactionIcon({
+    required IconData icon,
+    Color? color,
+    VoidCallback? onPressed,
+  }) {
+    if (onPressed == null) {
+      return Icon(icon, color: color ?? AppColors.leatherDark);
+    }
+    return IconButton(
+      onPressed: onPressed,
+      icon: Icon(icon, color: color ?? AppColors.leatherDark),
     );
   }
 }
