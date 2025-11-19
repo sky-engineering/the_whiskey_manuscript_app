@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'firebase_options.dart';
 import 'services/post_uploader.dart';
@@ -408,16 +409,28 @@ class _DashboardShellState extends State<DashboardShell> {
   Widget build(BuildContext context) {
     final currentPage = _pageConfigs[_selectedIndex];
 
+    final mediaQuery = MediaQuery.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(currentPage.label),
-        actions: [
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => FirebaseAuth.instance.signOut(),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(280),
+        child: Container(
+          color: AppColors.neutralLight,
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: mediaQuery.padding.top + 8,
+            bottom: 8,
           ),
-        ],
+          alignment: Alignment.bottomLeft,
+          child: SizedBox(
+            width: 256,
+            height: 256,
+            child: SvgPicture.asset(
+              'assets/images/logo/TWM_Mark_Primary.svg',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
       ),
       body: currentPage.view,
       bottomNavigationBar: NavigationBar(
@@ -1952,6 +1965,10 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
     _handleFieldChange();
   }
 
+  Future<void> _handleSignOut() async {
+    await FirebaseAuth.instance.signOut();
+  }
+
   Future<void> _save() async {
     final trimmed = _birthYearController.text.trim();
     int? parsedBirthYear;
@@ -2109,6 +2126,15 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _handleSignOut,
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Sign out'),
+              ),
             ),
             const SizedBox(height: 16),
             Wrap(
