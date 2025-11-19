@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 
 import 'firebase_options.dart';
 import 'services/post_uploader.dart';
@@ -16,6 +20,8 @@ import 'services/merchandise_service.dart';
 import 'services/friend_service.dart';
 import 'services/message_service.dart';
 import 'services/event_service.dart';
+import 'services/membership_service.dart';
+import 'services/user_library_service.dart';
 
 /// Centralized access to the Whiskey Manuscript palette.
 class AppColors {
@@ -79,6 +85,45 @@ const List<String> merchCategories = [
   'Other',
 ];
 
+class CountryOption {
+  final String code;
+  final String name;
+
+  const CountryOption({required this.code, required this.name});
+}
+
+const List<CountryOption> countryOptions = [
+  CountryOption(code: 'US', name: 'United States'),
+  CountryOption(code: 'CA', name: 'Canada'),
+  CountryOption(code: 'MX', name: 'Mexico'),
+  CountryOption(code: 'GB', name: 'United Kingdom'),
+  CountryOption(code: 'IE', name: 'Ireland'),
+  CountryOption(code: 'FR', name: 'France'),
+  CountryOption(code: 'DE', name: 'Germany'),
+  CountryOption(code: 'ES', name: 'Spain'),
+  CountryOption(code: 'IT', name: 'Italy'),
+  CountryOption(code: 'PT', name: 'Portugal'),
+  CountryOption(code: 'NL', name: 'Netherlands'),
+  CountryOption(code: 'SE', name: 'Sweden'),
+  CountryOption(code: 'NO', name: 'Norway'),
+  CountryOption(code: 'FI', name: 'Finland'),
+  CountryOption(code: 'DK', name: 'Denmark'),
+  CountryOption(code: 'IS', name: 'Iceland'),
+  CountryOption(code: 'AU', name: 'Australia'),
+  CountryOption(code: 'NZ', name: 'New Zealand'),
+  CountryOption(code: 'JP', name: 'Japan'),
+  CountryOption(code: 'CN', name: 'China'),
+  CountryOption(code: 'HK', name: 'Hong Kong'),
+  CountryOption(code: 'SG', name: 'Singapore'),
+  CountryOption(code: 'KR', name: 'South Korea'),
+  CountryOption(code: 'IN', name: 'India'),
+  CountryOption(code: 'BR', name: 'Brazil'),
+  CountryOption(code: 'AR', name: 'Argentina'),
+  CountryOption(code: 'CL', name: 'Chile'),
+  CountryOption(code: 'ZA', name: 'South Africa'),
+  CountryOption(code: 'AE', name: 'United Arab Emirates'),
+];
+
 Future<void> _ensureUserProfileDocument(User user) async {
   final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
   final snapshot = await docRef.get();
@@ -94,15 +139,23 @@ Future<void> _ensureUserProfileDocument(User user) async {
       'membershipLevel': membershipLevels.first,
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-    return;
+  } else {
+    await docRef.set(baseData, SetOptions(merge: true));
+    final existingLevel = snapshot.data()?['membershipLevel'] as String?;
+    if (existingLevel == null) {
+      await docRef.set(
+        {'membershipLevel': membershipLevels.first},
+        SetOptions(merge: true),
+      );
+    }
   }
 
-  await docRef.set(baseData, SetOptions(merge: true));
-  final existingLevel = snapshot.data()?['membershipLevel'] as String?;
-  if (existingLevel == null) {
-    await docRef.set(
-        {'membershipLevel': membershipLevels.first}, SetOptions(merge: true));
-  }
+  final fallbackLevel =
+      snapshot.data()?['membershipLevel'] as String? ?? membershipLevels.first;
+  await MembershipService().ensureMembershipProfile(
+    userId: user.uid,
+    fallbackTier: fallbackLevel,
+  );
 }
 
 Future<void> main() async {
@@ -680,6 +733,22 @@ class _UserPostsList extends StatefulWidget {
 }
 
 class _UserPostsListState extends State<_UserPostsList> {
+  final PostService _postService = PostService();
+
+  Future<void> _deletePost(BuildContext context, String postId) async {
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Delete post',
+      message: 'This will remove the post and its comments. Continue?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _postService.deletePost(postId),
+      successMessage: 'Post deleted.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final query = FirebaseFirestore.instance
@@ -729,6 +798,7 @@ class _UserPostsListState extends State<_UserPostsList> {
               onShowLikes: () => showLikesBottomSheet(context, likedBy),
               onOpenComments: () =>
                   showCommentsBottomSheet(context, postId: doc.id),
+              onDelete: () => _deletePost(context, doc.id),
             );
           }).toList(),
         );
@@ -737,8 +807,8 @@ class _UserPostsListState extends State<_UserPostsList> {
   }
 }
 
-class _FriendSummary extends StatelessWidget {
-  const _FriendSummary({super.key, required this.userId});
+class _FollowerStat extends StatelessWidget {
+  const _FollowerStat({super.key, required this.userId});
 
   final String userId;
 
@@ -747,28 +817,1518 @@ class _FriendSummary extends StatelessWidget {
     final stream = FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
-        .collection('friends')
+        .collection('followers')
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _ProfileStatChip(
+            label: 'Followers unavailable',
+          );
+        }
+        final count = snapshot.data?.docs.length ?? 0;
+        final label = count == 1 ? '1 follower' : '$count followers';
+        return _ProfileStatChip(
+          label: label,
+          onTap: () => _showFollowersSheet(context, userId: userId),
+        );
+      },
+    );
+  }
+}
+
+class _FollowingStat extends StatelessWidget {
+  const _FollowingStat({super.key, required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('following')
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _ProfileStatChip(
+            label: 'Following unavailable',
+          );
+        }
+        final count = snapshot.data?.docs.length ?? 0;
+        final label = count == 1 ? '1 following' : '$count following';
+        return _ProfileStatChip(
+          label: label,
+          onTap: () => _showFollowingSheet(context, userId: userId),
+        );
+      },
+    );
+  }
+}
+
+class _PostCountSummary extends StatelessWidget {
+  const _PostCountSummary({super.key, required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = FirebaseFirestore.instance
+        .collection('posts')
+        .where('userId', isEqualTo: userId)
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _ProfileStatChip(
+            label: 'Posts unavailable',
+          );
+        }
+        final count = snapshot.data?.docs.length ?? 0;
+        final label = count == 1 ? '1 post' : '$count posts';
+        return _ProfileStatChip(
+          label: label,
+        );
+      },
+    );
+  }
+}
+
+Future<void> _showFollowersSheet(BuildContext context,
+    {required String userId}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => FractionallySizedBox(
+      heightFactor: 0.8,
+      child: _RelationshipList(
+        userId: userId,
+        collection: 'followers',
+        emptyLabel: 'No followers yet.',
+        title: 'Followers',
+      ),
+    ),
+  );
+}
+
+Future<void> _showFollowingSheet(BuildContext context,
+    {required String userId}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => FractionallySizedBox(
+      heightFactor: 0.8,
+      child: _RelationshipList(
+        userId: userId,
+        collection: 'following',
+        emptyLabel: 'Not following anyone yet.',
+        title: 'Following',
+      ),
+    ),
+  );
+}
+
+class _RelationshipList extends StatefulWidget {
+  const _RelationshipList({
+    super.key,
+    required this.userId,
+    required this.collection,
+    required this.emptyLabel,
+    required this.title,
+  });
+
+  final String userId;
+  final String collection;
+  final String emptyLabel;
+  final String title;
+
+  @override
+  State<_RelationshipList> createState() => _RelationshipListState();
+}
+
+class _RelationshipListState extends State<_RelationshipList> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final Set<String> _pending = <String>{};
+
+  bool get _isOwnProfile => _auth.currentUser?.uid == widget.userId;
+
+  Future<void> _followUser(String targetId) async {
+    final current = _auth.currentUser;
+    if (current == null) {
+      _showSnack('Sign in to follow members.');
+      return;
+    }
+    if (current.uid == targetId) {
+      _showSnack('You cannot follow yourself.');
+      return;
+    }
+    setState(() => _pending.add(targetId));
+    try {
+      final targetDoc =
+          await _firestore.collection('users').doc(targetId).get();
+      if (!targetDoc.exists) {
+        throw Exception('Member not found.');
+      }
+      final targetData = targetDoc.data() ?? const <String, dynamic>{};
+      final targetDisplayName =
+          (targetData['displayName'] as String?)?.trim() ?? '';
+      final targetEmail = (targetData['email'] as String?)?.trim();
+      final targetMembership = targetData['membershipLevel'] as String?;
+
+      final currentDoc =
+          await _firestore.collection('users').doc(current.uid).get();
+      final currentData = currentDoc.data() ?? const <String, dynamic>{};
+      final currentDisplayName =
+          (currentData['displayName'] as String?)?.trim() ?? '';
+      final currentEmail = (currentData['email'] as String?)?.trim();
+      final currentMembership = currentData['membershipLevel'] as String?;
+
+      final batch = _firestore.batch();
+      batch.set(
+        _firestore
+            .collection('users')
+            .doc(current.uid)
+            .collection('following')
+            .doc(targetId),
+        {
+          'userId': targetId,
+          'displayName': targetDisplayName.isNotEmpty
+              ? targetDisplayName
+              : (targetEmail ?? 'Member'),
+          'email': targetEmail,
+          'membershipLevel': targetMembership,
+          'addedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        _firestore
+            .collection('users')
+            .doc(targetId)
+            .collection('followers')
+            .doc(current.uid),
+        {
+          'userId': current.uid,
+          'displayName': currentDisplayName.isNotEmpty
+              ? currentDisplayName
+              : (currentEmail ?? 'Member'),
+          'email': currentEmail,
+          'membershipLevel': currentMembership,
+          'addedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      await batch.commit();
+      final friendlyTargetName = targetDisplayName.isNotEmpty
+          ? targetDisplayName
+          : (targetEmail ?? 'member');
+      _showSnack('Now following $friendlyTargetName.');
+    } catch (e) {
+      _showSnack('Could not follow: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _pending.remove(targetId));
+      }
+    }
+  }
+
+  Future<void> _unfollowUser(String targetId) async {
+    final current = _auth.currentUser;
+    if (current == null) {
+      _showSnack('Sign in to manage follows.');
+      return;
+    }
+    setState(() => _pending.add(targetId));
+    try {
+      final batch = _firestore.batch();
+      batch.delete(
+        _firestore
+            .collection('users')
+            .doc(current.uid)
+            .collection('following')
+            .doc(targetId),
+      );
+      batch.delete(
+        _firestore
+            .collection('users')
+            .doc(targetId)
+            .collection('followers')
+            .doc(current.uid),
+      );
+      await batch.commit();
+      _showSnack('Unfollowed.');
+    } catch (e) {
+      _showSnack('Could not update follow: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _pending.remove(targetId));
+      }
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userId)
+        .collection(widget.collection)
         .orderBy('addedAt', descending: true)
         .snapshots();
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: stream,
       builder: (context, snapshot) {
-        final count = snapshot.data?.docs.length ?? 0;
-        final label = count == 1 ? '1 friend' : '$count friends';
-        return Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.leather,
+        final docs = snapshot.data?.docs ?? [];
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: AppColors.darkGreen),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
             ),
-            onPressed: () => showFriendsBottomSheet(context, userId: userId),
-            icon: const Icon(Icons.people_alt_rounded),
-            label: Text(label),
-          ),
+            if (snapshot.hasError)
+              const Expanded(
+                child: Center(
+                  child: Text('Could not load relationships.'),
+                ),
+              )
+            else if (docs.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    widget.emptyLabel,
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data();
+                    final name =
+                        (data['displayName'] as String? ?? 'Whiskey Friend')
+                            .trim();
+                    final targetUserId = (data['userId'] as String?)?.trim();
+                    final resolvedTargetId =
+                        (targetUserId != null && targetUserId.isNotEmpty)
+                            ? targetUserId
+                            : doc.id;
+                    final addedAt = data['addedAt'];
+                    final timestamp = addedAt is Timestamp
+                        ? addedAt.toDate()
+                        : DateTime.tryParse(addedAt?.toString() ?? '') ??
+                            DateTime.now();
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.darkGreen,
+                        foregroundColor: AppColors.onDark,
+                        child: Text(_initialsFor(name)),
+                      ),
+                      title: Text(name),
+                      subtitle: Text(
+                        'Since ${timestamp.month}/${timestamp.day}/${timestamp.year}',
+                      ),
+                      trailing: _buildActionButton(resolvedTargetId),
+                    );
+                  },
+                ),
+              ),
+          ],
         );
       },
     );
+  }
+
+  Widget _buildActionButton(String targetUserId) {
+    final currentUserId = _auth.currentUser?.uid;
+    if (!_isOwnProfile ||
+        currentUserId == null ||
+        currentUserId == targetUserId) {
+      return const SizedBox.shrink();
+    }
+    final isFollowingList = widget.collection == 'following';
+    final isPending = _pending.contains(targetUserId);
+
+    if (isFollowingList) {
+      return TextButton(
+        onPressed: isPending ? null : () => _unfollowUser(targetUserId),
+        child: isPending
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text('Unfollow'),
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .collection('following')
+          .doc(targetUserId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final isFollowing = snapshot.data?.exists ?? false;
+        final busy = _pending.contains(targetUserId);
+        if (isFollowing && widget.collection == 'followers') {
+          return SizedBox(
+            width: 90,
+            child: Text(
+              'Already\nFollowing',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.leatherDark.withOpacity(0.7),
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+            ),
+          );
+        }
+        return TextButton(
+          onPressed: busy
+              ? null
+              : () => isFollowing
+                  ? _unfollowUser(targetUserId)
+                  : _followUser(targetUserId),
+          child: busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(isFollowing ? 'Unfollow' : 'Follow'),
+        );
+      },
+    );
+  }
+}
+
+class _ProfileStatChip extends StatelessWidget {
+  const _ProfileStatChip({
+    super.key,
+    required this.label,
+    this.onTap,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.neutralLight,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          color: AppColors.darkGreen,
+        ),
+      ),
+    );
+    if (onTap == null) return chip;
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: onTap,
+      child: chip,
+    );
+  }
+}
+
+class _ProfileInfoRow extends StatelessWidget {
+  const _ProfileInfoRow({
+    super.key,
+    required this.label,
+    this.value,
+    this.allowCopy = false,
+  });
+
+  final String label;
+  final String? value;
+  final bool allowCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final resolvedValue =
+        (value == null || value!.isEmpty) ? 'Not provided' : value!;
+    final valueStyle =
+        theme.textTheme.bodyMedium?.copyWith(color: AppColors.darkGreen);
+    final valueWidget = allowCopy
+        ? SelectableText(resolvedValue, style: valueStyle)
+        : Text(resolvedValue, style: valueStyle);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: AppColors.leatherDark),
+          ),
+          const SizedBox(height: 4),
+          valueWidget,
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileEditableField extends StatelessWidget {
+  const _ProfileEditableField({
+    super.key,
+    required this.label,
+    required this.controller,
+    this.keyboardType,
+    this.textCapitalization = TextCapitalization.words,
+    this.inputFormatters,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+  final List<TextInputFormatter>? inputFormatters;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style:
+              theme.textTheme.bodySmall?.copyWith(color: AppColors.leatherDark),
+        ),
+        const SizedBox(height: 4),
+        TextFormField(
+          controller: controller,
+          textCapitalization: textCapitalization,
+          keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class MembershipDetailsPage extends StatefulWidget {
+  const MembershipDetailsPage({
+    super.key,
+    required this.userId,
+    this.fallbackTier,
+  });
+
+  final String userId;
+  final String? fallbackTier;
+
+  @override
+  State<MembershipDetailsPage> createState() => _MembershipDetailsPageState();
+}
+
+class _MembershipDetailsPageState extends State<MembershipDetailsPage> {
+  final MembershipService _membershipService = MembershipService();
+  late Future<Map<String, dynamic>> _loadFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFuture = _membershipService.ensureMembershipProfile(
+      userId: widget.userId,
+      fallbackTier: widget.fallbackTier,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Membership & Billing'),
+      ),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _loadFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'We could not load membership data. ${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodyMedium
+                      ?.copyWith(color: AppColors.leatherDark),
+                ),
+              ),
+            );
+          }
+
+          final membership = snapshot.data ?? const <String, dynamic>{};
+          return _MembershipDetailsView(membership: membership);
+        },
+      ),
+    );
+  }
+}
+
+class _MembershipDetailsView extends StatelessWidget {
+  const _MembershipDetailsView({
+    required this.membership,
+  });
+
+  final Map<String, dynamic> membership;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final fields = <_MembershipFieldTileData>[
+      _MembershipFieldTileData(
+        label: 'membership.tier',
+        value: _formatEnum(membership['tier'] as String?),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.status',
+        value: _formatEnum(membership['status'] as String?),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.startedAt',
+        value: _formatTimestamp(membership['startedAt']),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.renewsAt',
+        value: _formatTimestamp(membership['renewsAt']),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.canceledAt',
+        value: _formatTimestamp(membership['canceledAt']),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.billingProvider',
+        value: _formatEnum(membership['billingProvider'] as String?),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.billingCustomerId',
+        value: _formatString(membership['billingCustomerId'] as String?),
+      ),
+      _MembershipFieldTileData(
+        label: 'membership.trialEndsAt',
+        value: _formatTimestamp(membership['trialEndsAt']),
+      ),
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(
+          'Membership Overview',
+          style: textTheme.headlineSmall?.copyWith(color: AppColors.darkGreen),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Tiering, lifecycle, and billing identifiers synced directly from the profile document.',
+          style: textTheme.bodyMedium?.copyWith(color: AppColors.leatherDark),
+        ),
+        const SizedBox(height: 24),
+        for (final field in fields)
+          _MembershipFieldTile(
+            label: field.label,
+            value: field.value,
+          ),
+      ],
+    );
+  }
+
+  static String _formatEnum(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Not set';
+    }
+    final sanitized = value.trim();
+    return '${sanitized[0].toUpperCase()}${sanitized.substring(1)}';
+  }
+
+  static String _formatString(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Not set';
+    }
+    return value.trim();
+  }
+
+  static String _formatTimestamp(dynamic value) {
+    if (value is Timestamp) {
+      return _formatDate(value.toDate());
+    }
+    if (value is DateTime) {
+      return _formatDate(value);
+    }
+    return 'Not set';
+  }
+
+  static String _formatDate(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final year = local.year.toString();
+    final hourValue = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    return '$month/$day/$year $hourValue:$minute $period';
+  }
+}
+
+class _MembershipFieldTileData {
+  const _MembershipFieldTileData({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+}
+
+class _MembershipFieldTile extends StatelessWidget {
+  const _MembershipFieldTile({
+    super.key,
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        title: Text(
+          label,
+          style: theme.textTheme.labelMedium
+              ?.copyWith(color: AppColors.leatherDark),
+        ),
+        subtitle: Text(
+          value,
+          style:
+              theme.textTheme.titleMedium?.copyWith(color: AppColors.darkGreen),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileInfoCard extends StatefulWidget {
+  const _ProfileInfoCard({
+    super.key,
+    required this.userId,
+    required this.initials,
+    required this.primaryName,
+    required this.email,
+    required this.emailVerified,
+    required this.membership,
+    required this.membershipDescription,
+    required this.memberSince,
+    required this.firstName,
+    required this.lastName,
+    required this.countryCode,
+    required this.city,
+    required this.region,
+    required this.postalCode,
+    required this.allowLocationBasedFeatures,
+    required this.birthYear,
+    required this.onSave,
+    required this.onMembershipChanged,
+  });
+
+  final String userId;
+  final String initials;
+  final String primaryName;
+  final String email;
+  final bool emailVerified;
+  final String membership;
+  final String membershipDescription;
+  final DateTime? memberSince;
+  final String? firstName;
+  final String? lastName;
+  final String countryCode;
+  final String? city;
+  final String? region;
+  final String? postalCode;
+  final bool allowLocationBasedFeatures;
+  final int? birthYear;
+  final Future<void> Function(Map<String, dynamic> data,
+      {String? successMessage}) onSave;
+  final Future<void> Function(String? level) onMembershipChanged;
+
+  @override
+  State<_ProfileInfoCard> createState() => _ProfileInfoCardState();
+}
+
+Future<bool> _confirmDeletion(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String confirmLabel = 'Delete',
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
+Future<void> _performDeletion(
+  BuildContext context, {
+  required Future<void> Function() action,
+  required String successMessage,
+}) async {
+  try {
+    await action();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(successMessage)));
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not complete this action: $e')));
+  }
+}
+
+class _ProfileInfoCardState extends State<_ProfileInfoCard> {
+  late final TextEditingController _firstNameController;
+  late final TextEditingController _lastNameController;
+  late final TextEditingController _cityController;
+  late final TextEditingController _birthYearController;
+  String _countryCode = 'US';
+  String? _postalCode;
+  String? _resolvedCity;
+  String? _region;
+  bool _allowLocationFeatures = false;
+  bool _isDirty = false;
+  bool _isSaving = false;
+  bool _suppressFieldListeners = false;
+  Map<String, dynamic> _initialValues = <String, dynamic>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController = TextEditingController();
+    _lastNameController = TextEditingController();
+    _cityController = TextEditingController();
+    _birthYearController = TextEditingController();
+    _firstNameController.addListener(_handleFieldChange);
+    _lastNameController.addListener(_handleFieldChange);
+    _cityController.addListener(_handleFieldChange);
+    _birthYearController.addListener(_handleFieldChange);
+    _hydrateFromWidget();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileInfoCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isDirty && _hasWidgetDataChanged(oldWidget)) {
+      _hydrateFromWidget();
+    }
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _cityController.dispose();
+    _birthYearController.dispose();
+    super.dispose();
+  }
+
+  bool _hasWidgetDataChanged(_ProfileInfoCard oldWidget) {
+    return oldWidget.firstName != widget.firstName ||
+        oldWidget.lastName != widget.lastName ||
+        oldWidget.countryCode != widget.countryCode ||
+        oldWidget.city != widget.city ||
+        oldWidget.region != widget.region ||
+        oldWidget.postalCode != widget.postalCode ||
+        oldWidget.allowLocationBasedFeatures !=
+            widget.allowLocationBasedFeatures ||
+        oldWidget.birthYear != widget.birthYear ||
+        oldWidget.membership != widget.membership;
+  }
+
+  void _hydrateFromWidget() {
+    _suppressFieldListeners = true;
+    _firstNameController.text = widget.firstName ?? '';
+    _lastNameController.text = widget.lastName ?? '';
+    _cityController.text = widget.city ?? '';
+    _birthYearController.text = widget.birthYear?.toString() ?? '';
+    _suppressFieldListeners = false;
+    _countryCode = widget.countryCode;
+    _postalCode = widget.postalCode;
+    _resolvedCity = widget.countryCode == 'US' ? widget.city : null;
+    _region = widget.region;
+    _allowLocationFeatures = widget.allowLocationBasedFeatures;
+    _initialValues = _currentValueMap();
+    _isDirty = false;
+    setState(() {});
+  }
+
+  Map<String, dynamic> _currentValueMap({int? birthYearOverride}) {
+    final isUs = _countryCode == 'US';
+    return {
+      'firstName': _normalizeText(_firstNameController.text),
+      'lastName': _normalizeText(_lastNameController.text),
+      'countryCode': _countryCode,
+      'postalCode': isUs ? _normalizeText(_postalCode) : null,
+      'city': isUs ? _resolvedCity : _normalizeText(_cityController.text),
+      'region': isUs ? _region : null,
+      'birthYear': birthYearOverride ?? _tryParseBirthYear(),
+      'allowLocationBasedFeatures': _allowLocationFeatures,
+      'membership': widget.membership,
+    };
+  }
+
+  String? _normalizeText(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed;
+  }
+
+  int? _tryParseBirthYear() {
+    final trimmed = _birthYearController.text.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
+
+  void _handleFieldChange() {
+    if (_suppressFieldListeners) {
+      return;
+    }
+    final dirty = _computeIsDirty();
+    if (dirty != _isDirty) {
+      setState(() => _isDirty = dirty);
+    }
+  }
+
+  bool _computeIsDirty() {
+    final current = _currentValueMap();
+    for (final entry in _initialValues.entries) {
+      if (current[entry.key] != entry.value) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _handleCountryChanged(String? value) {
+    if (value == null || value == _countryCode) {
+      return;
+    }
+    setState(() {
+      _countryCode = value;
+      if (_countryCode != 'US') {
+        _cityController.text = _resolvedCity ?? _cityController.text;
+        _resolvedCity = null;
+        _postalCode = null;
+        _region = null;
+      } else {
+        _resolvedCity = _normalizeText(_cityController.text);
+      }
+    });
+    _handleFieldChange();
+  }
+
+  void _handleZipInputChanged(String zip) {
+    setState(() {
+      _postalCode = zip.isEmpty ? null : zip;
+      if (zip.isEmpty) {
+        _resolvedCity = null;
+        _region = null;
+      }
+    });
+    _handleFieldChange();
+  }
+
+  Future<void> _handleZipResolved(
+      String zip, String? city, String? state) async {
+    setState(() {
+      _postalCode = zip;
+      _resolvedCity = city;
+      _region = state;
+    });
+    _handleFieldChange();
+  }
+
+  void _handleLocationToggle(bool value) {
+    setState(() => _allowLocationFeatures = value);
+    _handleFieldChange();
+  }
+
+  Future<void> _save() async {
+    final trimmed = _birthYearController.text.trim();
+    int? parsedBirthYear;
+    if (trimmed.isNotEmpty) {
+      parsedBirthYear = int.tryParse(trimmed);
+      if (parsedBirthYear == null) {
+        _showSnack('Enter a valid birth year.');
+        return;
+      }
+    }
+    final changes = _diffWithInitial(birthYearOverride: parsedBirthYear);
+    if (changes.isEmpty) {
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSave(changes, successMessage: 'Profile updated');
+      _initialValues = _currentValueMap(birthYearOverride: parsedBirthYear);
+      setState(() {
+        _isDirty = false;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  Map<String, dynamic> _diffWithInitial({int? birthYearOverride}) {
+    final current = _currentValueMap(birthYearOverride: birthYearOverride);
+    final result = <String, dynamic>{};
+    for (final entry in current.entries) {
+      if (_initialValues[entry.key] != entry.value) {
+        if (entry.key == 'membership') continue;
+        result[entry.key] = entry.value;
+      }
+    }
+    return result;
+  }
+
+  void _revertChanges() {
+    _suppressFieldListeners = true;
+    _firstNameController.text = (_initialValues['firstName'] as String?) ?? '';
+    _lastNameController.text = (_initialValues['lastName'] as String?) ?? '';
+    _cityController.text = (_initialValues['city'] as String?) ?? '';
+    _birthYearController.text =
+        (_initialValues['birthYear'] as int?)?.toString() ?? '';
+    _suppressFieldListeners = false;
+    setState(() {
+      _countryCode = (_initialValues['countryCode'] as String?) ?? 'US';
+      _postalCode = _initialValues['postalCode'] as String?;
+      _resolvedCity = _initialValues['city'] as String?;
+      _region = _initialValues['region'] as String?;
+      _allowLocationFeatures =
+          _initialValues['allowLocationBasedFeatures'] as bool? ?? false;
+      _isDirty = false;
+    });
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _openMembershipDetails() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MembershipDetailsPage(
+          userId: widget.userId,
+          fallbackTier: widget.membership,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final memberSince = widget.memberSince;
+    final isUsSelected = _countryCode == 'US';
+
+    final trimmedFirstName = widget.firstName?.trim();
+    final trimmedLastName = widget.lastName?.trim();
+    final nameParts = <String>[
+      if (trimmedFirstName != null && trimmedFirstName.isNotEmpty)
+        trimmedFirstName,
+      if (trimmedLastName != null && trimmedLastName.isNotEmpty)
+        trimmedLastName,
+    ];
+    final resolvedDisplayName =
+        nameParts.isEmpty ? 'Whiskey Person' : nameParts.join(' ');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 48,
+                  backgroundColor: AppColors.darkGreen,
+                  foregroundColor: AppColors.onDark,
+                  child: Text(
+                    widget.initials,
+                    style: const TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        resolvedDisplayName,
+                        style: textTheme.titleLarge?.copyWith(
+                          color: AppColors.darkGreen,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.email,
+                        style: textTheme.bodyMedium
+                            ?.copyWith(color: AppColors.leatherDark),
+                      ),
+                      if (memberSince != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Member since ${memberSince.month}/${memberSince.day}/${memberSince.year}',
+                          style: textTheme.bodySmall
+                              ?.copyWith(color: AppColors.leatherDark),
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      InkWell(
+                        onTap: _openMembershipDetails,
+                        child: Text(
+                          'Membership Level: ${widget.membership}',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.leather,
+                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _FollowerStat(userId: widget.userId),
+                _FollowingStat(userId: widget.userId),
+                _PostCountSummary(userId: widget.userId),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: _ProfileInfoRow(
+                    label: 'Email',
+                    value: widget.email,
+                    allowCopy: true,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Icon(
+                  Icons.verified,
+                  color: widget.emailVerified
+                      ? Colors.green
+                      : AppColors.leatherDark.withOpacity(0.3),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _ProfileEditableField(
+                    label: 'First Name',
+                    controller: _firstNameController,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ProfileEditableField(
+                    label: 'Last Name',
+                    controller: _lastNameController,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _countryCode,
+              decoration: const InputDecoration(
+                labelText: 'Country',
+                border: OutlineInputBorder(),
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: [
+                for (final option in countryOptions)
+                  DropdownMenuItem(
+                    value: option.code,
+                    child: Text(option.name),
+                  ),
+              ],
+              onChanged: _handleCountryChanged,
+            ),
+            const SizedBox(height: 12),
+            if (isUsSelected)
+              _ZipCodeField(
+                postalCode: _postalCode,
+                city: _resolvedCity,
+                state: _region,
+                onZipResolved: _handleZipResolved,
+                onZipChanged: _handleZipInputChanged,
+              )
+            else
+              _ProfileEditableField(
+                label: 'City',
+                controller: _cityController,
+              ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Allow location-based features'),
+              subtitle: const Text(
+                'Enables experiences tailored to your location.',
+              ),
+              dense: true,
+              value: _allowLocationFeatures,
+              onChanged: _handleLocationToggle,
+            ),
+            const SizedBox(height: 12),
+            _ProfileEditableField(
+              label: 'Birth Year',
+              controller: _birthYearController,
+              keyboardType: TextInputType.number,
+              textCapitalization: TextCapitalization.none,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (_isDirty)
+                  TextButton(
+                    onPressed: _isSaving ? null : _revertChanges,
+                    child: const Text('Revert changes'),
+                  ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _isDirty && !_isSaving ? _save : null,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ZipCodeField extends StatefulWidget {
+  const _ZipCodeField({
+    required this.postalCode,
+    required this.city,
+    required this.state,
+    required this.onZipResolved,
+    required this.onZipChanged,
+  });
+
+  final String? postalCode;
+  final String? city;
+  final String? state;
+  final Future<void> Function(String zip, String? city, String? state)
+      onZipResolved;
+  final ValueChanged<String> onZipChanged;
+
+  @override
+  State<_ZipCodeField> createState() => _ZipCodeFieldState();
+}
+
+class _ZipCodeFieldState extends State<_ZipCodeField> {
+  late final TextEditingController _controller;
+  bool _isLoading = false;
+  String? _city;
+  String? _state;
+  String? _error;
+  bool _suppressChange = false;
+  String _lastLookupCandidate = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.postalCode ?? '');
+    _city = widget.city;
+    _state = widget.state;
+    _controller.addListener(_handleTextChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ZipCodeField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.postalCode != oldWidget.postalCode &&
+        widget.postalCode != _controller.text) {
+      _suppressChange = true;
+      _controller.text = widget.postalCode ?? '';
+      _suppressChange = false;
+    }
+    if (widget.city != oldWidget.city || widget.state != oldWidget.state) {
+      setState(() {
+        _city = widget.city;
+        _state = widget.state;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_handleTextChange);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTextChange() {
+    if (_suppressChange) {
+      return;
+    }
+    final value = _controller.text;
+    widget.onZipChanged(value);
+    if (value.length == 5 && value != _lastLookupCandidate) {
+      _lastLookupCandidate = value;
+      _resolveZip(value);
+    } else if (value.length != 5) {
+      _lastLookupCandidate = '';
+    }
+  }
+
+  Future<void> _resolveZip([String? value]) async {
+    final zip = (value ?? _controller.text).trim();
+    if (zip.isEmpty) {
+      setState(() {
+        _error = null;
+        _city = null;
+        _state = null;
+      });
+      await widget.onZipResolved('', null, null);
+      return;
+    }
+    if (!RegExp(r'^\d{5}$').hasMatch(zip)) {
+      setState(() => _error = 'Enter a valid 5-digit ZIP code.');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    final result = await ZipLookupService.lookup(zip);
+    if (!mounted) return;
+    if (result == null) {
+      setState(() {
+        _isLoading = false;
+        _error = 'We could not find that ZIP code.';
+      });
+      return;
+    }
+    await widget.onZipResolved(zip, result.city, result.stateAbbreviation);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _city = result.city;
+      _state = result.stateAbbreviation;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final helperColor = _error != null ? Colors.red : AppColors.leatherDark;
+    final helperText = _error ??
+        ((_city != null && _state != null)
+            ? '$_city, $_state'
+            : 'ZIP will auto-fill city and state');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText: 'ZIP code',
+            border: const OutlineInputBorder(),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            suffixIcon: _isLoading
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: 'Lookup ZIP',
+                    onPressed: () => _resolveZip(),
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+          ),
+          onFieldSubmitted: _resolveZip,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          helperText,
+          style: theme.textTheme.bodySmall?.copyWith(color: helperColor),
+        ),
+      ],
+    );
+  }
+}
+
+class ZipLookupResult {
+  const ZipLookupResult({
+    required this.zip,
+    required this.city,
+    required this.state,
+    required this.stateAbbreviation,
+  });
+
+  final String zip;
+  final String city;
+  final String state;
+  final String stateAbbreviation;
+}
+
+class ZipLookupService {
+  ZipLookupService._();
+
+  static final Map<String, ZipLookupResult> _cache = {};
+
+  static Future<ZipLookupResult?> lookup(String zip) async {
+    if (_cache.containsKey(zip)) {
+      return _cache[zip];
+    }
+    final uri = Uri.parse('https://api.zippopotam.us/us/$zip');
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final places = data['places'] as List<dynamic>?;
+      if (places == null || places.isEmpty) {
+        return null;
+      }
+      final place = places.first as Map<String, dynamic>;
+      final city = (place['place name'] as String? ?? '').trim();
+      final state = (place['state'] as String? ?? '').trim();
+      final abbr = (place['state abbreviation'] as String? ?? '').trim();
+      if (city.isEmpty || abbr.isEmpty) {
+        return null;
+      }
+      final result = ZipLookupResult(
+        zip: zip,
+        city: city,
+        state: state,
+        stateAbbreviation: abbr,
+      );
+      _cache[zip] = result;
+      return result;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -786,6 +2346,7 @@ class _PostCard extends StatelessWidget {
     this.onOpenComments,
     this.onAddFriend,
     this.isFriend = false,
+    this.onDelete,
   });
 
   final String authorLabel;
@@ -800,6 +2361,7 @@ class _PostCard extends StatelessWidget {
   final VoidCallback? onOpenComments;
   final VoidCallback? onAddFriend;
   final bool isFriend;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -848,6 +2410,15 @@ class _PostCard extends StatelessWidget {
                       isFriend ? Icons.person_rounded : Icons.person_add_alt_1,
                       color:
                           isFriend ? AppColors.leather : AppColors.leatherDark,
+                    ),
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.leatherDark,
                     ),
                   ),
               ],
@@ -1580,6 +3151,7 @@ class _UserWhiskeyList extends StatelessWidget {
   const _UserWhiskeyList({super.key, required this.userId});
 
   final String userId;
+  static final WhiskeyService _whiskeyService = WhiskeyService();
 
   @override
   Widget build(BuildContext context) {
@@ -1624,10 +3196,912 @@ class _UserWhiskeyList extends StatelessWidget {
                 membership: doc.data()['membershipLevel'] as String?,
                 timestamp: _coerceTimestamp(doc.data()['createdAt']),
                 showAuthor: false,
+                onDelete: () => _deleteWhiskey(
+                  context,
+                  doc.id,
+                  doc.data()['name'] as String?,
+                ),
               ),
           ],
         );
       },
+    );
+  }
+
+  Future<void> _deleteWhiskey(
+    BuildContext context,
+    String whiskeyId,
+    String? label,
+  ) async {
+    final displayName =
+        (label == null || label.trim().isEmpty) ? 'this whiskey' : label.trim();
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Remove whiskey',
+      message: 'Delete $displayName from your library?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _whiskeyService.deleteWhiskey(whiskeyId),
+      successMessage: 'Whiskey removed.',
+    );
+  }
+}
+
+class _UserSavedWhiskeyList extends StatelessWidget {
+  const _UserSavedWhiskeyList({
+    super.key,
+    required this.userId,
+    required this.collectionName,
+    required this.emptyMessage,
+  });
+
+  final String userId;
+  final String collectionName;
+  final String emptyMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection(collectionName)
+        .orderBy('addedAt', descending: true);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _FeedMessage(
+            message: 'We could not load your saved bottles.',
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return _FeedMessage(message: emptyMessage);
+        }
+
+        return Column(
+          children: [
+            for (final doc in docs)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  title: Text(
+                    doc.data()['name'] as String? ?? 'Whiskey',
+                    style: const TextStyle(color: AppColors.darkGreen),
+                  ),
+                  subtitle: Text(
+                    _buildSavedWhiskeySubtitle(doc.data()),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                  trailing: Text(
+                    _formatEventDate(_coerceTimestamp(doc.data()['addedAt'])),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _buildSavedWhiskeySubtitle(Map<String, dynamic> data) {
+    final style = (data['style'] as String? ?? '').trim();
+    final region = (data['region'] as String? ?? '').trim();
+    final parts = [style, region].where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      return 'Details coming soon';
+    }
+    return parts.join(' - ');
+  }
+}
+
+class _UserFavoriteDistilleriesList extends StatelessWidget {
+  const _UserFavoriteDistilleriesList({super.key, required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favoriteDistilleries')
+        .orderBy('addedAt', descending: true);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _FeedMessage(
+            message: 'We could not load favorite distilleries.',
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _FeedMessage(
+            message:
+                'Your Distillery list is blank.\nVisit the Content tab and mark your first favorite.',
+          );
+        }
+
+        return Column(
+          children: [
+            for (final doc in docs)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  title: Text(
+                    doc.data()['name'] as String? ?? 'Distillery',
+                    style: const TextStyle(color: AppColors.darkGreen),
+                  ),
+                  subtitle: Text(
+                    _buildFavoriteDistillerySubtitle(doc.data()),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                  trailing: Text(
+                    _formatEventDate(_coerceTimestamp(doc.data()['addedAt'])),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _buildFavoriteDistillerySubtitle(Map<String, dynamic> data) {
+    final location = (data['location'] as String? ?? '').trim();
+    final pour = (data['signaturePour'] as String? ?? '').trim();
+    final parts = [location, pour].where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      return 'Details coming soon';
+    }
+    return parts.join(' - ');
+  }
+}
+
+class _UserFavoriteArticlesList extends StatelessWidget {
+  const _UserFavoriteArticlesList({super.key, required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('favoriteArticles')
+        .orderBy('addedAt', descending: true);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _FeedMessage(
+            message: 'We could not load favorite articles.',
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _FeedMessage(
+            message:
+                'Your Article Library is empty.\nFind something in Content and add it here.',
+          );
+        }
+
+        return Column(
+          children: [
+            for (final doc in docs)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  title: Text(
+                    doc.data()['title'] as String? ?? 'Article',
+                    style: const TextStyle(color: AppColors.darkGreen),
+                  ),
+                  subtitle: Text(
+                    _buildFavoriteArticleSubtitle(doc.data()),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                  trailing: Text(
+                    _formatEventDate(_coerceTimestamp(doc.data()['addedAt'])),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _buildFavoriteArticleSubtitle(Map<String, dynamic> data) {
+    final category = (data['category'] as String? ?? '').trim();
+    final author = (data['author'] as String? ?? '').trim();
+    final parts = [category, author].where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      return 'Details coming soon';
+    }
+    return parts.join(' - ');
+  }
+}
+
+class _UserLookupSection extends StatefulWidget {
+  const _UserLookupSection({super.key});
+  @override
+  State<_UserLookupSection> createState() => _UserLookupSectionState();
+}
+
+class _UserLookupSectionState extends State<_UserLookupSection> {
+  final TextEditingController _controller = TextEditingController();
+  bool _isLoading = false;
+  String? _error;
+  List<_LookupUser> _results = [];
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final rawQuery = _controller.text.trim();
+    final keyword = rawQuery.toLowerCase();
+    if (keyword.isEmpty) {
+      setState(() {
+        _error = 'Enter a name or email to search.';
+        _results = [];
+      });
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _results = [];
+    });
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('users').limit(150).get();
+      final matches = <_LookupUser>[];
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final matchesQuery = _matchesTerm(data['displayName'], keyword) ||
+            _matchesTerm(data['firstName'], keyword) ||
+            _matchesTerm(data['lastName'], keyword) ||
+            _matchesTerm(data['email'], keyword);
+        if (matchesQuery) {
+          matches.add(_LookupUser(id: doc.id, data: data));
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _results = matches;
+        if (matches.isEmpty) {
+          _error = "No users matched '$rawQuery'.";
+        }
+      });
+      if (matches.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showResultsSheet();
+        });
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'We could not search users right now.';
+        _results = [];
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showResultsSheet() {
+    if (_results.isEmpty || !mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        final titleStyle = Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(color: AppColors.darkGreen, fontWeight: FontWeight.bold);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Search Results', style: titleStyle),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.5,
+                  child: ListView.builder(
+                    itemCount: _results.length,
+                    itemBuilder: (context, index) {
+                      final user = _results[index];
+                      final data = user.data;
+                      final name = _resolveName(data, user.id);
+                      final email = (data['email'] as String? ?? '').trim();
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          title: Text(name),
+                          subtitle: Text(
+                            email.isEmpty ? 'Email not provided' : email,
+                            style:
+                                const TextStyle(color: AppColors.leatherDark),
+                          ),
+                          onTap: () {
+                            Navigator.of(context).maybePop();
+                            _showUserDetails(user);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => _search(),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search_rounded),
+            hintText: 'Search members by name or email',
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: _isLoading ? null : _search,
+            icon: const Icon(Icons.person_search_rounded),
+            label: const Text('Find User'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_isLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (_error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: AppColors.leatherDark),
+            ),
+          )
+        else if (!_isLoading && _results.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _showResultsSheet,
+              icon: const Icon(Icons.expand_circle_down_rounded),
+              label: const Text('View Results'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  bool _matchesTerm(Object? source, String term) {
+    if (source == null) return false;
+    final value = source.toString().toLowerCase();
+    return value.contains(term);
+  }
+
+  String _resolveName(Map<String, dynamic> data, String fallback) {
+    final displayName = (data['displayName'] as String? ?? '').trim();
+    if (displayName.isNotEmpty) return displayName;
+    final parts = [
+      (data['firstName'] as String? ?? '').trim(),
+      (data['lastName'] as String? ?? '').trim(),
+    ]..removeWhere((part) => part.isEmpty);
+    if (parts.isNotEmpty) {
+      return parts.join(' ');
+    }
+    if (fallback.isNotEmpty) {
+      final max = fallback.length < 6 ? fallback.length : 6;
+      return 'Member ' + fallback.substring(0, max);
+    }
+    return 'Member';
+  }
+
+  String _roleLabel(Map<String, dynamic> data) {
+    return _roleValue(data) == 'admin' ? 'Admin' : 'User';
+  }
+
+  String _roleValue(Map<String, dynamic> data) {
+    final raw = (data['role'] as String? ?? 'user').toLowerCase();
+    return raw == 'admin' ? 'admin' : 'user';
+  }
+
+  String _formatLocation(Map<String, dynamic> data) {
+    final parts = [
+      (data['city'] as String? ?? '').trim(),
+      (data['region'] as String? ?? '').trim(),
+      (data['countryCode'] as String? ?? '').trim(),
+    ]..removeWhere((part) => part.isEmpty);
+    return parts.join(', ');
+  }
+
+  void _showUserDetails(_LookupUser user) {
+    final data = user.data;
+    final name = _resolveName(data, user.id);
+    final email = (data['email'] as String? ?? '').trim();
+    final membership = (data['membershipLevel'] as String? ?? '').trim();
+    final location = _formatLocation(data);
+    var roleValue = _roleValue(data);
+    var isUpdatingRole = false;
+    String? roleError;
+    final joined = data['createdAt'] != null
+        ? _formatEventDate(_coerceTimestamp(data['createdAt']).toLocal())
+        : 'Not available';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final titleStyle = Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(color: AppColors.darkGreen, fontWeight: FontWeight.bold);
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> handleRoleChange(String? value) async {
+              if (value == null || value == roleValue) return;
+              setSheetState(() {
+                isUpdatingRole = true;
+                roleError = null;
+              });
+              try {
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.id)
+                    .set({'role': value}, SetOptions(merge: true));
+                if (!mounted) return;
+                setState(() {
+                  user.data['role'] = value;
+                });
+                setSheetState(() {
+                  roleValue = value;
+                });
+              } catch (_) {
+                setSheetState(() {
+                  roleError = 'We could not update the role. Try again soon.';
+                });
+              } finally {
+                setSheetState(() {
+                  isUpdatingRole = false;
+                });
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: titleStyle),
+                    if (email.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        email,
+                        style: const TextStyle(color: AppColors.leatherDark),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Role',
+                      style: TextStyle(
+                        color: AppColors.leatherDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: roleValue,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: AppColors.lightNeutral,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'user', child: Text('User')),
+                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                      ],
+                      onChanged: isUpdatingRole ? null : handleRoleChange,
+                    ),
+                    if (roleError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        roleError!,
+                        style: const TextStyle(color: AppColors.leatherDark),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    _UserDetailRow(
+                      label: 'Membership',
+                      value: membership.isEmpty ? 'Not set' : membership,
+                    ),
+                    _UserDetailRow(
+                      label: 'Location',
+                      value: location.isEmpty ? 'Not shared' : location,
+                    ),
+                    _UserDetailRow(label: 'Joined', value: joined),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        child: const Text('Close'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _LookupUser {
+  _LookupUser({required this.id, required Map<String, dynamic> data})
+      : data = Map<String, dynamic>.from(data);
+  final String id;
+  final Map<String, dynamic> data;
+}
+
+class _UserDetailRow extends StatelessWidget {
+  const _UserDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.leatherDark,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: AppColors.darkGreen),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UserFriendsList extends StatelessWidget {
+  const _UserFriendsList({super.key, required this.userId});
+
+  final String userId;
+  static final FriendService _friendService = FriendService();
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('friends')
+        .orderBy('addedAt', descending: true)
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _FeedMessage(
+            message: 'We could not load your friends.',
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _FeedMessage(
+            message: 'No friends yet. Tap profiles to add someone.',
+          );
+        }
+
+        return Column(
+          children: [
+            for (final doc in docs)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.neutralLight,
+                    foregroundColor: AppColors.darkGreen,
+                    child: Text(
+                      _initialsFor(
+                        (doc.data()['displayName'] as String? ?? 'F').trim(),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    (doc.data()['displayName'] as String? ?? 'Member').trim(),
+                    style: const TextStyle(color: AppColors.darkGreen),
+                  ),
+                  subtitle: Text(
+                    (doc.data()['email'] as String? ?? 'No email').trim(),
+                    style: const TextStyle(color: AppColors.leatherDark),
+                  ),
+                  trailing: IconButton(
+                    tooltip: 'Remove friend',
+                    icon: const Icon(Icons.delete_outline,
+                        color: AppColors.leatherDark),
+                    onPressed: () => _removeFriend(
+                      context,
+                      doc.id,
+                      doc.data()['displayName'] as String?,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _removeFriend(
+    BuildContext context,
+    String friendId,
+    String? label,
+  ) async {
+    final displayName =
+        (label == null || label.trim().isEmpty) ? 'this friend' : label.trim();
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Remove friend',
+      message: 'Remove ${displayName} from your list?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _friendService.removeFriend(friendId),
+      successMessage: 'Friend removed.',
+    );
+  }
+}
+
+class _UserSentMessagesList extends StatelessWidget {
+  const _UserSentMessagesList({super.key, required this.userId});
+
+  final String userId;
+  static final MessageService _messageService = MessageService();
+
+  @override
+  Widget build(BuildContext context) {
+    final query = FirebaseFirestore.instance
+        .collection('messages')
+        .where('fromUserId', isEqualTo: userId)
+        .orderBy('sentAt', descending: true);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _FeedMessage(
+            message: 'We could not load your messages.',
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _FeedMessage(
+            message: 'You have not sent any messages yet.',
+          );
+        }
+
+        return Column(
+          children: [
+            for (final doc in docs)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  title: Text(
+                    'To ' +
+                        (doc.data()['toDisplayName'] as String? ?? 'Member'),
+                    style: const TextStyle(color: AppColors.darkGreen),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatMessageTimestamp(
+                            _coerceTimestamp(doc.data()['sentAt'])),
+                        style: const TextStyle(color: AppColors.leatherDark),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        (doc.data()['message'] as String? ?? '').trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.darkGreen),
+                      ),
+                    ],
+                  ),
+                  trailing: IconButton(
+                    tooltip: 'Delete message',
+                    icon: const Icon(Icons.delete_outline,
+                        color: AppColors.leatherDark),
+                    onPressed: () => _deleteMessage(context, doc.id),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteMessage(BuildContext context, String messageId) async {
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Delete message',
+      message: 'This removes the sent message for you. Continue?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _messageService.deleteMessage(messageId),
+      successMessage: 'Message deleted.',
+    );
+  }
+}
+
+class _UserEventList extends StatelessWidget {
+  const _UserEventList({super.key, required this.userId});
+
+  final String userId;
+  static final EventService _eventService = EventService();
+
+  @override
+  Widget build(BuildContext context) {
+    final query = FirebaseFirestore.instance
+        .collection('events')
+        .where('userId', isEqualTo: userId)
+        .orderBy('date', descending: true);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _FeedMessage(
+            message: 'We could not load your events.',
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _FeedMessage(
+            message: 'No hosted events yet. Create one to get started.',
+          );
+        }
+
+        return Column(
+          children: [
+            for (final doc in docs)
+              _EventCard(
+                title: doc.data()['title'] as String? ?? 'Private Event',
+                location: doc.data()['location'] as String? ?? 'TBD',
+                details: (doc.data()['details'] as String? ?? '').trim(),
+                date: _coerceTimestamp(doc.data()['date']),
+                onDelete: () => _deleteEvent(
+                  context,
+                  doc.id,
+                  doc.data()['title'] as String?,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteEvent(
+    BuildContext context,
+    String eventId,
+    String? label,
+  ) async {
+    final displayName =
+        (label == null || label.trim().isEmpty) ? 'this event' : label.trim();
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Delete event',
+      message: 'Cancel ${displayName}?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _eventService.deleteEvent(eventId),
+      successMessage: 'Event removed.',
     );
   }
 }
@@ -1643,6 +4117,7 @@ class _WhiskeyCard extends StatelessWidget {
     required this.timestamp,
     this.membership,
     this.showAuthor = true,
+    this.onDelete,
   });
 
   final String whiskeyName;
@@ -1653,6 +4128,7 @@ class _WhiskeyCard extends StatelessWidget {
   final DateTime timestamp;
   final String? membership;
   final bool showAuthor;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1695,6 +4171,15 @@ class _WhiskeyCard extends StatelessWidget {
                   Chip(
                     label: Text(membership!),
                     backgroundColor: AppColors.neutralLight,
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.leatherDark,
+                    ),
                   ),
               ],
             ),
@@ -1854,6 +4339,7 @@ class _UserDistilleryList extends StatelessWidget {
   const _UserDistilleryList({super.key, required this.userId});
 
   final String userId;
+  static final DistilleryService _distilleryService = DistilleryService();
 
   @override
   Widget build(BuildContext context) {
@@ -1900,10 +4386,36 @@ class _UserDistilleryList extends StatelessWidget {
                 membership: doc.data()['membershipLevel'] as String?,
                 timestamp: _coerceTimestamp(doc.data()['createdAt']),
                 showAuthor: false,
+                onDelete: () => _deleteDistillery(
+                  context,
+                  doc.id,
+                  doc.data()['name'] as String?,
+                ),
               ),
           ],
         );
       },
+    );
+  }
+
+  Future<void> _deleteDistillery(
+    BuildContext context,
+    String distilleryId,
+    String? label,
+  ) async {
+    final displayName = (label == null || label.trim().isEmpty)
+        ? 'this distillery'
+        : label.trim();
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Remove distillery',
+      message: 'Delete $displayName from your spotlights?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _distilleryService.deleteDistillery(distilleryId),
+      successMessage: 'Distillery removed.',
     );
   }
 }
@@ -1918,6 +4430,7 @@ class _DistilleryCard extends StatelessWidget {
     required this.timestamp,
     this.membership,
     this.showAuthor = true,
+    this.onDelete,
   });
 
   final String name;
@@ -1928,6 +4441,7 @@ class _DistilleryCard extends StatelessWidget {
   final DateTime timestamp;
   final String? membership;
   final bool showAuthor;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1967,6 +4481,15 @@ class _DistilleryCard extends StatelessWidget {
                   Chip(
                     label: Text(membership!),
                     backgroundColor: AppColors.neutralLight,
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.leatherDark,
+                    ),
                   ),
               ],
             ),
@@ -2117,6 +4640,7 @@ class _UserArticleList extends StatelessWidget {
   const _UserArticleList({super.key, required this.userId});
 
   final String userId;
+  static final ArticleService _articleService = ArticleService();
 
   @override
   Widget build(BuildContext context) {
@@ -2161,10 +4685,35 @@ class _UserArticleList extends StatelessWidget {
                 membership: doc.data()['membershipLevel'] as String?,
                 timestamp: _coerceTimestamp(doc.data()['createdAt']),
                 showAuthor: false,
+                onDelete: () => _deleteArticle(
+                  context,
+                  doc.id,
+                  doc.data()['title'] as String?,
+                ),
               ),
           ],
         );
       },
+    );
+  }
+
+  Future<void> _deleteArticle(
+    BuildContext context,
+    String articleId,
+    String? label,
+  ) async {
+    final displayName =
+        (label == null || label.trim().isEmpty) ? 'this article' : label.trim();
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Remove article',
+      message: 'Delete ${displayName} from your archive?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _articleService.deleteArticle(articleId),
+      successMessage: 'Article removed.',
     );
   }
 }
@@ -2179,6 +4728,7 @@ class _ArticleCard extends StatelessWidget {
     required this.timestamp,
     this.membership,
     this.showAuthor = true,
+    this.onDelete,
   });
 
   final String title;
@@ -2189,6 +4739,7 @@ class _ArticleCard extends StatelessWidget {
   final DateTime timestamp;
   final String? membership;
   final bool showAuthor;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -2228,6 +4779,15 @@ class _ArticleCard extends StatelessWidget {
                   Chip(
                     label: Text(membership!),
                     backgroundColor: AppColors.neutralLight,
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.leatherDark,
+                    ),
                   ),
               ],
             ),
@@ -2389,6 +4949,7 @@ class _UserMerchList extends StatelessWidget {
   const _UserMerchList({super.key, required this.userId});
 
   final String userId;
+  static final MerchandiseService _merchService = MerchandiseService();
 
   @override
   Widget build(BuildContext context) {
@@ -2434,10 +4995,35 @@ class _UserMerchList extends StatelessWidget {
                 membership: doc.data()['membershipLevel'] as String?,
                 timestamp: _coerceTimestamp(doc.data()['createdAt']),
                 showAuthor: false,
+                onDelete: () => _deleteMerch(
+                  context,
+                  doc.id,
+                  doc.data()['title'] as String?,
+                ),
               ),
           ],
         );
       },
+    );
+  }
+
+  Future<void> _deleteMerch(
+    BuildContext context,
+    String itemId,
+    String? label,
+  ) async {
+    final displayName =
+        (label == null || label.trim().isEmpty) ? 'this item' : label.trim();
+    final confirmed = await _confirmDeletion(
+      context,
+      title: 'Remove item',
+      message: 'Delete $displayName from your merchandise?',
+    );
+    if (!confirmed) return;
+    await _performDeletion(
+      context,
+      action: () => _merchService.deleteItem(itemId),
+      successMessage: 'Item removed.',
     );
   }
 }
@@ -2453,6 +5039,7 @@ class _MerchCard extends StatelessWidget {
     required this.timestamp,
     this.membership,
     this.showAuthor = true,
+    this.onDelete,
   });
 
   final String title;
@@ -2464,6 +5051,7 @@ class _MerchCard extends StatelessWidget {
   final DateTime timestamp;
   final String? membership;
   final bool showAuthor;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -2506,6 +5094,15 @@ class _MerchCard extends StatelessWidget {
                   Chip(
                     label: Text(membership!),
                     backgroundColor: AppColors.neutralLight,
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.leatherDark,
+                    ),
                   ),
               ],
             ),
@@ -2949,7 +5546,7 @@ class ContentPage extends StatelessWidget {
         const _GlobalWhiskeyFeed(),
         const SizedBox(height: 32),
         Text(
-          'Distillery Spotlights',
+          'Favorite Distilleries',
           style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
         ),
         const SizedBox(height: 12),
@@ -2971,13 +5568,38 @@ class _ShowcaseData {
   final String subtitle;
   final String footer;
   final String? badge;
+  final List<_ShowcaseAction> actions;
 
   const _ShowcaseData({
     required this.title,
     required this.subtitle,
     required this.footer,
     this.badge,
+    this.actions = const [],
   });
+}
+
+class _ShowcaseAction {
+  const _ShowcaseAction({
+    required this.label,
+    required this.onSelected,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+  final Future<void> Function(BuildContext context) onSelected;
+}
+
+String _resolveActionErrorMessage(Object error) {
+  final raw = error.toString();
+  if (raw.startsWith('Exception: ')) {
+    return raw.substring(11);
+  }
+  if (raw.startsWith('Bad state: ')) {
+    return raw.substring(11);
+  }
+  return raw;
 }
 
 class _HorizontalShowcase extends StatelessWidget {
@@ -3020,6 +5642,7 @@ class _ShowcaseCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Text(
@@ -3033,9 +5656,42 @@ class _ShowcaseCard extends StatelessWidget {
                 ),
               ),
               if (data.badge != null)
-                Chip(
-                  label: Text(data.badge!),
-                  backgroundColor: AppColors.neutralLight,
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Chip(
+                    label: Text(data.badge!),
+                    backgroundColor: AppColors.neutralLight,
+                  ),
+                ),
+              if (data.actions.isNotEmpty)
+                PopupMenuButton<_ShowcaseAction>(
+                  tooltip: 'Save',
+                  icon: const Icon(
+                    Icons.more_horiz_rounded,
+                    color: AppColors.leatherDark,
+                  ),
+                  onSelected: (action) {
+                    action.onSelected(context);
+                  },
+                  itemBuilder: (context) => [
+                    for (final action in data.actions)
+                      PopupMenuItem<_ShowcaseAction>(
+                        value: action,
+                        child: Row(
+                          children: [
+                            if (action.icon != null) ...[
+                              Icon(
+                                action.icon,
+                                size: 18,
+                                color: AppColors.leatherDark,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(action.label),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
             ],
           ),
@@ -3236,6 +5892,224 @@ class _LibraryDatabaseSheetState extends State<_LibraryDatabaseSheet> {
   }
 }
 
+class WhiskeyDatabasePage extends StatefulWidget {
+  const WhiskeyDatabasePage({super.key, required this.onAddWhiskey});
+
+  final Future<void> Function(BuildContext) onAddWhiskey;
+
+  @override
+  State<WhiskeyDatabasePage> createState() => _WhiskeyDatabasePageState();
+}
+
+class _WhiskeyDatabasePageState extends State<WhiskeyDatabasePage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  String _membershipFilter = 'All';
+
+  List<String> get _membershipFilters => ['All', ...membershipLevels];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      final next = _searchController.text.trim();
+      if (next != _query) setState(() => _query = next);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleAddWhiskey() async {
+    await widget.onAddWhiskey(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TWM Whiskey Database'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _handleAddWhiskey,
+        icon: const Icon(Icons.local_bar_rounded),
+        label: const Text('Add Whiskey'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search whiskeys by name, style, or region...',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final filter in _membershipFilters)
+                  ChoiceChip(
+                    label: Text(filter),
+                    selected: _membershipFilter == filter,
+                    onSelected: (selected) {
+                      if (!selected) return;
+                      setState(() => _membershipFilter = filter);
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _DatabaseWhiskeyList(
+                query: _query,
+                membership: _membershipFilter,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DistilleryDatabasePage extends StatefulWidget {
+  const DistilleryDatabasePage({super.key, required this.onAddDistillery});
+
+  final Future<void> Function(BuildContext) onAddDistillery;
+
+  @override
+  State<DistilleryDatabasePage> createState() => _DistilleryDatabasePageState();
+}
+
+class _DistilleryDatabasePageState extends State<DistilleryDatabasePage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  String _membershipFilter = 'All';
+
+  List<String> get _membershipFilters => ['All', ...membershipLevels];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      final next = _searchController.text.trim();
+      if (next != _query) setState(() => _query = next);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleAddDistillery() async {
+    await widget.onAddDistillery(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TWM Distillery Database'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _handleAddDistillery,
+        icon: const Icon(Icons.factory_rounded),
+        label: const Text('Add Distillery'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search distilleries by name or location...',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final filter in _membershipFilters)
+                  ChoiceChip(
+                    label: Text(filter),
+                    selected: _membershipFilter == filter,
+                    onSelected: (selected) {
+                      if (!selected) return;
+                      setState(() => _membershipFilter = filter);
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _DatabaseDistilleryList(
+                query: _query,
+                membership: _membershipFilter,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DatabaseLinkButton extends StatelessWidget {
+  const _DatabaseLinkButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final linkStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: AppColors.darkGreen,
+          decoration: TextDecoration.underline,
+          decorationColor: AppColors.darkGreen,
+        );
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, bottom: 4),
+      child: TextButton(
+        onPressed: onTap,
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          alignment: Alignment.centerLeft,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '•',
+              style: TextStyle(
+                color: AppColors.darkGreen,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: linkStyle),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DatabaseWhiskeyList extends StatelessWidget {
   const _DatabaseWhiskeyList({required this.query, required this.membership});
 
@@ -3317,6 +6191,226 @@ class _DatabaseDistilleryList extends StatelessWidget {
         timestamp: _coerceTimestamp(doc['createdAt']),
       ),
       filter: _matches,
+    );
+  }
+}
+
+class ArticleDatabasePage extends StatefulWidget {
+  const ArticleDatabasePage({super.key, required this.onAddArticle});
+
+  final Future<void> Function(BuildContext) onAddArticle;
+
+  @override
+  State<ArticleDatabasePage> createState() => _ArticleDatabasePageState();
+}
+
+class _ArticleDatabasePageState extends State<ArticleDatabasePage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  String _membershipFilter = 'All';
+
+  List<String> get _membershipFilters => ['All', ...membershipLevels];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      final next = _searchController.text.trim();
+      if (next != _query) setState(() => _query = next);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleAddArticle() async {
+    await widget.onAddArticle(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TWM Articles Database'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _handleAddArticle,
+        icon: const Icon(Icons.edit_note_rounded),
+        label: const Text('Add Article'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search articles by title or category...',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final filter in _membershipFilters)
+                  ChoiceChip(
+                    label: Text(filter),
+                    selected: _membershipFilter == filter,
+                    onSelected: (selected) {
+                      if (!selected) return;
+                      setState(() => _membershipFilter = filter);
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _DatabaseArticleList(
+                query: _query,
+                membership: _membershipFilter,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MerchDatabasePage extends StatefulWidget {
+  const MerchDatabasePage({super.key, required this.onAddMerch});
+
+  final Future<void> Function(BuildContext) onAddMerch;
+
+  @override
+  State<MerchDatabasePage> createState() => _MerchDatabasePageState();
+}
+
+class EventsDatabasePage extends StatelessWidget {
+  const EventsDatabasePage({super.key, required this.onAddEvent});
+
+  final Future<void> Function(BuildContext) onAddEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    final stream = FirebaseFirestore.instance
+        .collection('events')
+        .orderBy('date')
+        .snapshots();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TWM Events Database'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => onAddEvent(context),
+        icon: const Icon(Icons.event_note_rounded),
+        label: const Text('Add Event'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: stream,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const _FeedMessage(
+                message: 'We could not load upcoming events.',
+              );
+            }
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final docs = snapshot.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return const _FeedMessage(
+                message: 'No events planned yet. Add one from your profile.',
+              );
+            }
+            return ListView.separated(
+              itemCount: docs.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final data = docs[index].data();
+                final title =
+                    (data['title'] as String? ?? 'Private Event').trim();
+                final location = (data['location'] as String? ?? 'TBD').trim();
+                final details = (data['details'] as String? ?? '').trim();
+                final date = _coerceTimestamp(data['date']);
+                return _EventCard(
+                  title: title,
+                  location: location,
+                  details: details,
+                  date: date,
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _MerchDatabasePageState extends State<MerchDatabasePage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      final next = _searchController.text.trim();
+      if (next != _query) setState(() => _query = next);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleAdd() async {
+    await widget.onAddMerch(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TWM Merchandise Database'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _handleAdd,
+        icon: const Icon(Icons.add_shopping_cart),
+        label: const Text('Add Item'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search merchandise by title or category...',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _MerchandiseFeed(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3412,6 +6506,47 @@ class _DatabaseStream extends StatelessWidget {
 class _GlobalWhiskeyFeed extends StatelessWidget {
   const _GlobalWhiskeyFeed();
 
+  Future<void> _handleWhiskeySave(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc, {
+    required bool wishlist,
+  }) async {
+    final data = doc.data();
+    final service = UserLibraryService();
+    final rawName = (data['name'] as String? ?? 'Whiskey').trim();
+    final resolvedName = rawName.isEmpty ? 'This whiskey' : rawName;
+    try {
+      if (wishlist) {
+        await service.addWhiskeyToWishlist(
+          whiskeyId: doc.id,
+          name: resolvedName,
+          style: data['style'] as String? ?? 'Special Release',
+          region: data['region'] as String? ?? 'Unknown region',
+          membership: data['membershipLevel'] as String?,
+        );
+      } else {
+        await service.addWhiskeyToCollection(
+          whiskeyId: doc.id,
+          name: resolvedName,
+          style: data['style'] as String? ?? 'Special Release',
+          region: data['region'] as String? ?? 'Unknown region',
+          membership: data['membershipLevel'] as String?,
+        );
+      }
+      if (!context.mounted) return;
+      final target = wishlist ? 'wishlist' : 'collection';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$resolvedName added to your $target.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Could not save: ${_resolveActionErrorMessage(e)}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final stream = FirebaseFirestore.instance
@@ -3447,6 +6582,20 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
               subtitle: doc.data()['style'] as String? ?? 'Release',
               footer: doc.data()['region'] as String? ?? 'Unknown region',
               badge: doc.data()['membershipLevel'] as String?,
+              actions: [
+                _ShowcaseAction(
+                  label: 'Add to collection',
+                  icon: Icons.inventory_2_rounded,
+                  onSelected: (ctx) =>
+                      _handleWhiskeySave(ctx, doc, wishlist: false),
+                ),
+                _ShowcaseAction(
+                  label: 'Add to wishlist',
+                  icon: Icons.favorite_border_rounded,
+                  onSelected: (ctx) =>
+                      _handleWhiskeySave(ctx, doc, wishlist: true),
+                ),
+              ],
             ),
         ];
 
@@ -3458,6 +6607,34 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
 
 class _GlobalArticleFeed extends StatelessWidget {
   const _GlobalArticleFeed();
+
+  Future<void> _favoriteArticle(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) async {
+    final data = doc.data();
+    final service = UserLibraryService();
+    final rawTitle = (data['title'] as String? ?? 'Article').trim();
+    final resolvedTitle = rawTitle.isEmpty ? 'This article' : rawTitle;
+    try {
+      await service.addFavoriteArticle(
+        articleId: doc.id,
+        title: resolvedTitle,
+        category: data['category'] as String? ?? 'Story',
+        author: data['userName'] as String? ?? 'Contributor',
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$resolvedTitle added to favorites.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Could not save: ${_resolveActionErrorMessage(e)}')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3494,6 +6671,13 @@ class _GlobalArticleFeed extends StatelessWidget {
               subtitle: doc.data()['category'] as String? ?? 'Story',
               footer: doc.data()['userName'] as String? ?? 'Contributor',
               badge: doc.data()['membershipLevel'] as String?,
+              actions: [
+                _ShowcaseAction(
+                  label: 'Favorite article',
+                  icon: Icons.bookmark_add_outlined,
+                  onSelected: (ctx) => _favoriteArticle(ctx, doc),
+                ),
+              ],
             ),
         ];
         return _HorizontalShowcase(items: items);
@@ -3504,6 +6688,34 @@ class _GlobalArticleFeed extends StatelessWidget {
 
 class _GlobalDistilleryFeed extends StatelessWidget {
   const _GlobalDistilleryFeed();
+
+  Future<void> _favoriteDistillery(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) async {
+    final data = doc.data();
+    final service = UserLibraryService();
+    final rawName = (data['name'] as String? ?? 'Distillery').trim();
+    final resolvedName = rawName.isEmpty ? 'This distillery' : rawName;
+    try {
+      await service.addFavoriteDistillery(
+        distilleryId: doc.id,
+        name: resolvedName,
+        location: data['location'] as String? ?? 'Unknown location',
+        signaturePour: data['signaturePour'] as String? ?? 'Signature pour',
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$resolvedName added to favorites.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Could not save: ${_resolveActionErrorMessage(e)}')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3541,6 +6753,13 @@ class _GlobalDistilleryFeed extends StatelessWidget {
               footer:
                   doc.data()['signaturePour'] as String? ?? 'Signature pour',
               badge: doc.data()['membershipLevel'] as String?,
+              actions: [
+                _ShowcaseAction(
+                  label: 'Favorite distillery',
+                  icon: Icons.star_border_rounded,
+                  onSelected: (ctx) => _favoriteDistillery(ctx, doc),
+                ),
+              ],
             ),
         ];
         return _HorizontalShowcase(items: items);
@@ -3957,12 +7176,14 @@ class _EventCard extends StatelessWidget {
     required this.location,
     required this.details,
     required this.date,
+    this.onDelete,
   });
 
   final String title;
   final String location;
   final String details;
   final DateTime date;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -3991,6 +7212,15 @@ class _EventCard extends StatelessWidget {
                     color: AppColors.leatherDark,
                   ),
                 ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete event',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.leatherDark,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -4163,6 +7393,56 @@ class ProfilePage extends StatelessWidget {
     }
   }
 
+  void _openWhiskeyDatabasePage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WhiskeyDatabasePage(
+          onAddWhiskey: _openAddWhiskeySheet,
+        ),
+      ),
+    );
+  }
+
+  void _openDistilleryDatabasePage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DistilleryDatabasePage(
+          onAddDistillery: _openAddDistillerySheet,
+        ),
+      ),
+    );
+  }
+
+  void _openArticlesDatabasePage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArticleDatabasePage(
+          onAddArticle: _openAddArticleSheet,
+        ),
+      ),
+    );
+  }
+
+  void _openMerchDatabasePage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MerchDatabasePage(
+          onAddMerch: _openAddMerchSheet,
+        ),
+      ),
+    );
+  }
+
+  void _openEventsDatabasePage(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EventsDatabasePage(
+          onAddEvent: _openAddEventSheet,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -4191,18 +7471,57 @@ class ProfilePage extends StatelessWidget {
         final userData = snapshot.data?.data() ?? const <String, dynamic>{};
         final membership =
             (userData['membershipLevel'] as String?) ?? membershipLevels.first;
+        final membershipDescription =
+            membershipDescriptions[membership] ?? 'Exclusive experiences.';
+        final roleValue = (userData['role'] as String? ?? 'user').toLowerCase();
+        final isAdmin = roleValue == 'admin';
         final metadata = user.metadata.creationTime;
         final email = user.email ?? 'No email available';
         final displayName = (user.displayName ?? email).trim();
         final initials = _initialsFor(displayName);
-        final membershipDescription =
-            membershipDescriptions[membership] ?? 'Exclusive experiences.';
+        final firstName = (userData['firstName'] as String?)?.trim();
+        final lastName = (userData['lastName'] as String?)?.trim();
+        final hasFullName = (firstName != null && firstName.isNotEmpty) &&
+            (lastName != null && lastName.isNotEmpty);
+        final primaryName = hasFullName ? '$firstName $lastName' : displayName;
+        final countryCode =
+            (userData['countryCode'] as String? ?? 'US').toUpperCase();
+        final city = (userData['city'] as String?)?.trim();
+        final region = (userData['region'] as String?)?.trim();
+        final postalCode = (userData['postalCode'] as String?)?.trim();
+        final allowLocationBasedFeatures =
+            userData['allowLocationBasedFeatures'] as bool? ?? false;
+        final birthYear = userData['birthYear'] as int?;
+        final emailVerified =
+            userData['emailVerified'] as bool? ?? user.emailVerified;
+
+        Future<void> _saveProfileData(Map<String, dynamic> data,
+            {String? successMessage}) async {
+          try {
+            await docRef.set(data, SetOptions(merge: true));
+            if (successMessage != null && context.mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(successMessage)));
+            }
+          } catch (e) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not update profile: $e')),
+            );
+          }
+        }
 
         Future<void> updateMembership(String? level) async {
           if (level == null || level == membership) return;
           try {
-            await docRef
-                .set({'membershipLevel': level}, SetOptions(merge: true));
+            final normalizedTier = level.toLowerCase();
+            await docRef.set(
+              {
+                'membershipLevel': level,
+                'membership': {'tier': normalizedTier},
+              },
+              SetOptions(merge: true),
+            );
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Membership updated to $level.')),
@@ -4223,186 +7542,106 @@ class ProfilePage extends StatelessWidget {
           shrinkWrap: true,
           padding: const EdgeInsets.all(24),
           children: [
+            _ProfileInfoCard(
+              userId: user.uid,
+              initials: initials,
+              primaryName: primaryName,
+              email: email,
+              emailVerified: emailVerified,
+              membership: membership,
+              membershipDescription: membershipDescription,
+              memberSince: metadata,
+              firstName: firstName,
+              lastName: lastName,
+              countryCode: countryCode,
+              city: city,
+              region: region,
+              postalCode: postalCode,
+              allowLocationBasedFeatures: allowLocationBasedFeatures,
+              birthYear: birthYear,
+              onSave: _saveProfileData,
+              onMembershipChanged: updateMembership,
+            ),
+            const SizedBox(height: 32),
             Text(
-              'Your Profile',
-              style: textTheme.headlineMedium
-                  ?.copyWith(color: AppColors.darkGreen),
+              'Whiskey Collection',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
             ),
-            const SizedBox(height: 16),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: AppColors.darkGreen,
-                          foregroundColor: AppColors.onDark,
-                          child: Text(
-                            initials,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                displayName,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.darkGreen,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                email,
-                                style: const TextStyle(
-                                    color: AppColors.leatherDark),
-                              ),
-                              if (metadata != null) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Member since ${metadata.month}/${metadata.day}/${metadata.year}',
-                                  style: const TextStyle(
-                                      color: AppColors.leatherDark),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Membership Level',
-                      style: textTheme.titleMedium
-                          ?.copyWith(color: AppColors.darkGreen),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: membership,
-                      decoration: const InputDecoration(
-                        filled: true,
-                        fillColor: AppColors.lightNeutral,
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        for (final level in membershipLevels)
-                          DropdownMenuItem(
-                            value: level,
-                            child: Text(level),
-                          ),
-                      ],
-                      onChanged: updateMembership,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      membershipDescription,
-                      style: textTheme.bodyMedium
-                          ?.copyWith(color: AppColors.leatherDark),
-                    ),
-                    const SizedBox(height: 16),
-                    _FriendSummary(userId: user.uid),
-                  ],
-                ),
+            const SizedBox(height: 12),
+            _UserSavedWhiskeyList(
+              userId: user.uid,
+              collectionName: 'whiskeyCollection',
+              emptyMessage:
+                  'Your Library is blank.\nBrowse the Content tab and add your first entry.',
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Whiskey Wishlist',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            ),
+            const SizedBox(height: 12),
+            _UserSavedWhiskeyList(
+              userId: user.uid,
+              collectionName: 'whiskeyWishlist',
+              emptyMessage:
+                  'Your Wishlist is empty.\nExplore the Content tab to plan your next pour.',
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Favorite Distilleries',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            ),
+            const SizedBox(height: 12),
+            _UserFavoriteDistilleriesList(userId: user.uid),
+            const SizedBox(height: 32),
+            Text(
+              'Favorite Articles',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            ),
+            const SizedBox(height: 12),
+            _UserFavoriteArticlesList(userId: user.uid),
+            if (isAdmin) ...[
+              const SizedBox(height: 32),
+              Text(
+                'User Lookup',
+                style:
+                    textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
               ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'My Whiskey Library',
-                    style: textTheme.titleLarge
-                        ?.copyWith(color: AppColors.darkGreen),
+              const SizedBox(height: 12),
+              const _UserLookupSection(),
+              const SizedBox(height: 20),
+              Text(
+                'The Whiskey Manuscript Databases',
+                style: textTheme.titleMedium?.copyWith(color: AppColors.leatherDark),
+              ),
+              const SizedBox(height: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _DatabaseLinkButton(
+                    label: 'Whiskey',
+                    onTap: () => _openWhiskeyDatabasePage(context),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _openAddWhiskeySheet(context),
-                  icon: const Icon(Icons.local_bar_rounded),
-                  label: const Text('Add Whiskey'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Favorite Distilleries',
-                    style: textTheme.titleLarge
-                        ?.copyWith(color: AppColors.darkGreen),
+                  _DatabaseLinkButton(
+                    label: 'Distillery',
+                    onTap: () => _openDistilleryDatabasePage(context),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _openAddDistillerySheet(context),
-                  icon: const Icon(Icons.factory_rounded),
-                  label: const Text('Add Distillery'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Articles & Essays',
-                    style: textTheme.titleLarge
-                        ?.copyWith(color: AppColors.darkGreen),
+                  _DatabaseLinkButton(
+                    label: 'Articles',
+                    onTap: () => _openArticlesDatabasePage(context),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _openAddArticleSheet(context),
-                  icon: const Icon(Icons.edit_note_rounded),
-                  label: const Text('Add Article'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Merchandise',
-                    style: textTheme.titleLarge
-                        ?.copyWith(color: AppColors.darkGreen),
+                  _DatabaseLinkButton(
+                    label: 'Merchandise',
+                    onTap: () => _openMerchDatabasePage(context),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _openAddMerchSheet(context),
-                  icon: const Icon(Icons.shopping_bag_rounded),
-                  label: const Text('Add Item'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Events Calendar',
-                    style: textTheme.titleLarge
-                        ?.copyWith(color: AppColors.darkGreen),
+                  _DatabaseLinkButton(
+                    label: 'Events',
+                    onTap: () => _openEventsDatabasePage(context),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _openAddEventSheet(context),
-                  icon: const Icon(Icons.event_note_rounded),
-                  label: const Text('Add Event'),
-                ),
-              ],
-            ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
             const SizedBox(height: 32),
             Text(
               'My Posts',

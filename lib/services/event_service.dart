@@ -36,4 +36,20 @@ class EventService {
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
+  Future<void> deleteEvent(String eventId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Please sign in to manage events.');
+    }
+
+    final docRef = _firestore.collection('events').doc(eventId);
+    final snapshot = await docRef.get();
+    final ownerId = snapshot.data()?['userId'] as String?;
+    if (!snapshot.exists || ownerId != user.uid) {
+      throw Exception('You can only delete your events.');
+    }
+
+    await docRef.delete();
+  }
+
 }

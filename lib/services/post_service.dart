@@ -95,4 +95,29 @@ class PostService {
       });
     });
   }
+  Future<void> deletePost(String postId) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No logged-in user');
+
+    final docRef = _firestore.collection('posts').doc(postId);
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) {
+      throw Exception('Post not found.');
+    }
+    final data = snapshot.data();
+    final ownerId = data?['userId'] as String?;
+    if (ownerId != user.uid) {
+      throw Exception('You can only delete your posts.');
+    }
+
+    final comments = await docRef.collection('comments').get();
+    final batch = _firestore.batch();
+    batch.delete(docRef);
+    for (final comment in comments.docs) {
+      batch.delete(comment.reference);
+    }
+    await batch.commit();
+  }
+
 }
+

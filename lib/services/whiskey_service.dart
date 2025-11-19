@@ -37,4 +37,20 @@ class WhiskeyService {
     final doc = await _firestore.collection('users').doc(uid).get();
     return doc.data()?['membershipLevel'] as String?;
   }
+  Future<void> deleteWhiskey(String whiskeyId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user.');
+    }
+
+    final docRef = _firestore.collection('whiskeys').doc(whiskeyId);
+    final snapshot = await docRef.get();
+    final ownerId = snapshot.data()?['userId'] as String?;
+    if (!snapshot.exists || ownerId != user.uid) {
+      throw Exception('You can only delete your own whiskeys.');
+    }
+
+    await docRef.delete();
+  }
+
 }

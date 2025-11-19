@@ -59,6 +59,53 @@ service cloud.firestore {
           && (request.resource.data.membershipLevel == null || request.resource.data.membershipLevel is string)
           && request.resource.data.addedAt == request.time;
       }
+
+      match /followers/{followerId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.auth.uid == followerId
+          && request.resource.data.keys().hasOnly(['userId','displayName','email','membershipLevel','addedAt'])
+          && request.resource.data.userId is string
+          && request.resource.data.userId == followerId
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && (request.resource.data.email == null || request.resource.data.email is string)
+          && (request.resource.data.membershipLevel == null || request.resource.data.membershipLevel is string)
+          && request.resource.data.addedAt == request.time;
+        allow delete: if isSignedIn() && (request.auth.uid == followerId || request.auth.uid == userId);
+      }
+
+      match /following/{targetId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['userId','displayName','email','membershipLevel','addedAt'])
+          && request.resource.data.userId is string
+          && request.resource.data.userId == targetId
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && (request.resource.data.email == null || request.resource.data.email is string)
+          && (request.resource.data.membershipLevel == null || request.resource.data.membershipLevel is string)
+          && request.resource.data.addedAt == request.time;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+ 
+
+      match /whiskeyCollection/{whiskeyId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /whiskeyWishlist/{whiskeyId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /favoriteDistilleries/{distilleryId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /favoriteArticles/{articleId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     match /whiskeys/{whiskeyId} {
@@ -146,6 +193,9 @@ service cloud.firestore {
         && (request.resource.data.toMembershipLevel == null || request.resource.data.toMembershipLevel is string)
         && request.resource.data.message is string && request.resource.data.message.size() > 0
         && request.resource.data.sentAt == request.time;
+      allow delete: if isSignedIn() &&
+        (request.auth.uid == resource.data.fromUserId ||
+         request.auth.uid == resource.data.toUserId);
     }
 
     match /posts/{postId} {

@@ -61,4 +61,25 @@ class MessageService {
       'sentAt': FieldValue.serverTimestamp(),
     });
   }
+  Future<void> deleteMessage(String messageId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Please sign in.');
+    }
+
+    final docRef = _firestore.collection('messages').doc(messageId);
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) {
+      throw Exception('Message not found.');
+    }
+    final data = snapshot.data();
+    final senderId = data?['fromUserId'] as String?;
+    final recipientId = data?['toUserId'] as String?;
+    if (senderId != user.uid && recipientId != user.uid) {
+      throw Exception('You can only delete your messages.');
+    }
+
+    await docRef.delete();
+  }
+
 }

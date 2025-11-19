@@ -39,4 +39,20 @@ class MerchandiseService {
     final doc = await _firestore.collection('users').doc(uid).get();
     return doc.data()?['membershipLevel'] as String?;
   }
+  Future<void> deleteItem(String itemId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user.');
+    }
+
+    final docRef = _firestore.collection('merch').doc(itemId);
+    final snapshot = await docRef.get();
+    final ownerId = snapshot.data()?['userId'] as String?;
+    if (!snapshot.exists || ownerId != user.uid) {
+      throw Exception('You can only delete your own merchandise.');
+    }
+
+    await docRef.delete();
+  }
+
 }
