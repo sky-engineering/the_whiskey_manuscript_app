@@ -612,6 +612,14 @@ class _SocialPageState extends State<SocialPage> {
     return showCommentsBottomSheet(context, postId: postId);
   }
 
+  void _openPostDetail(String postId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PostDetailPage(postId: postId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -719,6 +727,7 @@ class _SocialPageState extends State<SocialPage> {
               onOpenComments: () => _openComments(doc.id),
               onAddFriend: addFriendCallback,
               isFriend: alreadyFriend,
+              onTap: () => _openPostDetail(doc.id),
             );
           },
         );
@@ -738,6 +747,14 @@ class _UserPostsList extends StatefulWidget {
 
 class _UserPostsListState extends State<_UserPostsList> {
   final PostService _postService = PostService();
+
+  void _openPostDetail(String postId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PostDetailPage(postId: postId),
+      ),
+    );
+  }
 
   Future<void> _deletePost(BuildContext context, String postId) async {
     final confirmed = await _confirmDeletion(
@@ -803,6 +820,7 @@ class _UserPostsListState extends State<_UserPostsList> {
               onOpenComments: () =>
                   showCommentsBottomSheet(context, postId: doc.id),
               onDelete: () => _deletePost(context, doc.id),
+              onTap: () => _openPostDetail(doc.id),
             );
           }).toList(),
         );
@@ -2337,6 +2355,7 @@ class _PostCard extends StatelessWidget {
     this.onAddFriend,
     this.isFriend = false,
     this.onDelete,
+    this.onTap,
   });
 
   final String authorLabel;
@@ -2352,10 +2371,11 @@ class _PostCard extends StatelessWidget {
   final VoidCallback? onAddFriend;
   final bool isFriend;
   final VoidCallback? onDelete;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final content = Padding(
       padding: const EdgeInsets.only(bottom: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2497,6 +2517,16 @@ class _PostCard extends StatelessWidget {
         ],
       ),
     );
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: content,
+        ),
+      );
+    }
+    return content;
   }
 
   static String _formatDate(DateTime timestamp) =>
@@ -2701,21 +2731,141 @@ Future<void> showCommentsBottomSheet(
     ),
     builder: (context) => FractionallySizedBox(
       heightFactor: 0.9,
-      child: _CommentsBottomSheet(postId: postId),
+      child: PostCommentsView(
+        postId: postId,
+        showHandle: true,
+      ),
     ),
   );
 }
 
-class _CommentsBottomSheet extends StatefulWidget {
-  const _CommentsBottomSheet({required this.postId});
+class PostDetailPage extends StatefulWidget {
+  const PostDetailPage({super.key, required this.postId});
 
   final String postId;
 
   @override
-  State<_CommentsBottomSheet> createState() => _CommentsBottomSheetState();
+  State<PostDetailPage> createState() => _PostDetailPageState();
 }
 
-class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
+class _PostDetailPageState extends State<PostDetailPage> {
+  final PostService _postService = PostService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<void> _toggleLike() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to like posts.')),
+      );
+      return;
+    }
+
+    try {
+      await _postService.toggleLike(widget.postId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update like: $e')),
+      );
+    }
+  }
+
+  Future<void> _showLikes(List<String> likedUserIds) {
+    return showLikesBottomSheet(context, likedUserIds);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final postRef =
+        FirebaseFirestore.instance.collection('posts').doc(widget.postId);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Post'),
+      ),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: postRef.snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('Could not load this post.'),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.data!.exists) {
+            return const Center(
+              child: Text('Post is no longer available.'),
+            );
+          }
+
+          final data = snapshot.data!.data();
+          if (data == null) {
+            return const Center(
+              child: Text('Post is no longer available.'),
+            );
+          }
+
+          final likedBy =
+              List<String>.from((data['likedBy'] as List<dynamic>? ?? []));
+          final likeCount = data['likeCount'] as int? ?? likedBy.length;
+          final commentCount = data['commentCount'] as int? ?? 0;
+          final caption = (data['caption'] as String? ?? '').trim();
+          final author = (data['email'] as String? ?? 'Member').trim();
+          final imageUrl = data['imageUrl'] as String?;
+          final timestamp = _coerceTimestamp(data['timestamp']);
+          final currentUserId = _auth.currentUser?.uid;
+          final isLiked =
+              currentUserId != null && likedBy.contains(currentUserId);
+
+          return Column(
+            children: [
+              _PostCard(
+                authorLabel: author,
+                timestamp: timestamp,
+                imageUrl: imageUrl,
+                caption: caption,
+                likeCount: likeCount,
+                commentCount: commentCount,
+                isLiked: isLiked,
+                onToggleLike: _toggleLike,
+                onShowLikes: () => _showLikes(likedBy),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: PostCommentsView(
+                  postId: widget.postId,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class PostCommentsView extends StatefulWidget {
+  const PostCommentsView({
+    super.key,
+    required this.postId,
+    this.showHandle = false,
+    this.padding,
+  });
+
+  final String postId;
+  final bool showHandle;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  State<PostCommentsView> createState() => _PostCommentsViewState();
+}
+
+class _PostCommentsViewState extends State<PostCommentsView> {
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _controller = TextEditingController();
@@ -2769,30 +2919,35 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
 
     final user = _auth.currentUser;
 
+    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    const basePadding = EdgeInsets.fromLTRB(24, 16, 24, 16);
+    final resolvedPadding =
+        (widget.padding ?? basePadding).add(EdgeInsets.only(bottom: viewInsets));
+
     return SafeArea(
-      top: false,
+      top: !widget.showHandle,
       child: Padding(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
+        padding: resolvedPadding,
         child: Column(
           children: [
-            Container(
-              width: 48,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.neutralMid,
-                borderRadius: BorderRadius.circular(2),
+            if (widget.showHandle) ...[
+              Container(
+                width: 48,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.neutralMid,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Comments',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.darkGreen, fontWeight: FontWeight.w600),
+              const SizedBox(height: 16),
+            ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Comments',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.darkGreen, fontWeight: FontWeight.w600),
+              ),
             ),
             const SizedBox(height: 16),
             Expanded(
