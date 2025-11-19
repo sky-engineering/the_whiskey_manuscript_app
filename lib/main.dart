@@ -182,16 +182,13 @@ class MyApp extends StatelessWidget {
       title: 'The Whiskey Manuscript',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: const ColorScheme(
-          brightness: Brightness.light,
+        colorScheme: const ColorScheme.light(
           primary: AppColors.darkGreen,
           onPrimary: AppColors.onDark,
           secondary: AppColors.leather,
           onSecondary: AppColors.onDark,
           error: Color(0xFFB3261E),
           onError: AppColors.onDark,
-          background: AppColors.neutralLight,
-          onBackground: AppColors.darkGreen,
           surface: AppColors.lightNeutral,
           onSurface: AppColors.darkGreen,
         ),
@@ -701,11 +698,10 @@ class _SocialPageState extends State<SocialPage> {
             final canAddFriend = postOwnerId != null &&
                 currentUserId != null &&
                 postOwnerId != currentUserId;
-            final alreadyFriend = canAddFriend &&
-                postOwnerId != null &&
-                _friendIds.contains(postOwnerId);
+            final alreadyFriend =
+                canAddFriend && _friendIds.contains(postOwnerId);
             final VoidCallback? addFriendCallback =
-                (!alreadyFriend && canAddFriend && postOwnerId != null)
+                (!alreadyFriend && canAddFriend)
                     ? () => _addFriend(postOwnerId)
                     : null;
 
@@ -731,7 +727,7 @@ class _SocialPageState extends State<SocialPage> {
 }
 
 class _UserPostsList extends StatefulWidget {
-  const _UserPostsList({super.key, required this.userId});
+  const _UserPostsList({required this.userId});
 
   final String userId;
 
@@ -748,7 +744,7 @@ class _UserPostsListState extends State<_UserPostsList> {
       title: 'Delete post',
       message: 'This will remove the post and its comments. Continue?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _postService.deletePost(postId),
@@ -815,7 +811,7 @@ class _UserPostsListState extends State<_UserPostsList> {
 }
 
 class _FollowerStat extends StatelessWidget {
-  const _FollowerStat({super.key, required this.userId});
+  const _FollowerStat({required this.userId});
 
   final String userId;
 
@@ -847,7 +843,7 @@ class _FollowerStat extends StatelessWidget {
 }
 
 class _FollowingStat extends StatelessWidget {
-  const _FollowingStat({super.key, required this.userId});
+  const _FollowingStat({required this.userId});
 
   final String userId;
 
@@ -879,7 +875,7 @@ class _FollowingStat extends StatelessWidget {
 }
 
 class _PostCountSummary extends StatelessWidget {
-  const _PostCountSummary({super.key, required this.userId});
+  const _PostCountSummary({required this.userId});
 
   final String userId;
 
@@ -949,9 +945,7 @@ Future<void> _showFollowingSheet(BuildContext context,
 }
 
 class _RelationshipList extends StatefulWidget {
-  const _RelationshipList({
-    super.key,
-    required this.userId,
+  const _RelationshipList({required this.userId,
     required this.collection,
     required this.emptyLabel,
     required this.title,
@@ -1224,7 +1218,7 @@ class _RelationshipListState extends State<_RelationshipList> {
               'Already\nFollowing',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.leatherDark.withOpacity(0.7),
+                color: AppColors.leatherDark.withValues(alpha: 0.7),
                 fontWeight: FontWeight.w600,
                 height: 1.2,
               ),
@@ -1251,9 +1245,7 @@ class _RelationshipListState extends State<_RelationshipList> {
 }
 
 class _ProfileStatChip extends StatelessWidget {
-  const _ProfileStatChip({
-    super.key,
-    required this.label,
+  const _ProfileStatChip({required this.label,
     this.onTap,
   });
 
@@ -1286,9 +1278,7 @@ class _ProfileStatChip extends StatelessWidget {
 }
 
 class _ProfileInfoRow extends StatelessWidget {
-  const _ProfileInfoRow({
-    super.key,
-    required this.label,
+  const _ProfileInfoRow({required this.label,
     this.value,
     this.allowCopy = false,
   });
@@ -1326,9 +1316,7 @@ class _ProfileInfoRow extends StatelessWidget {
 }
 
 class _ProfileEditableField extends StatelessWidget {
-  const _ProfileEditableField({
-    super.key,
-    required this.label,
+  const _ProfileEditableField({required this.label,
     required this.controller,
     this.keyboardType,
     this.textCapitalization = TextCapitalization.words,
@@ -1370,9 +1358,7 @@ class _ProfileEditableField extends StatelessWidget {
 }
 
 class MembershipDetailsPage extends StatefulWidget {
-  const MembershipDetailsPage({
-    super.key,
-    required this.userId,
+  const MembershipDetailsPage({super.key, required this.userId,
     this.fallbackTier,
   });
 
@@ -1546,9 +1532,7 @@ class _MembershipFieldTileData {
 }
 
 class _MembershipFieldTile extends StatelessWidget {
-  const _MembershipFieldTile({
-    super.key,
-    required this.label,
+  const _MembershipFieldTile({required this.label,
     required this.value,
   });
 
@@ -1577,9 +1561,7 @@ class _MembershipFieldTile extends StatelessWidget {
 }
 
 class _ProfileInfoCard extends StatefulWidget {
-  const _ProfileInfoCard({
-    super.key,
-    required this.userId,
+  const _ProfileInfoCard({required this.userId,
     required this.initials,
     required this.primaryName,
     required this.email,
@@ -2020,7 +2002,7 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
                   Icons.verified,
                   color: widget.emailVerified
                       ? Colors.green
-                      : AppColors.leatherDark.withOpacity(0.3),
+                      : AppColors.leatherDark.withValues(alpha: 0.3),
                 ),
               ],
             ),
@@ -2044,7 +2026,7 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _countryCode,
+              initialValue: _countryCode,
               decoration: const InputDecoration(
                 labelText: 'Country',
                 border: OutlineInputBorder(),
@@ -2770,6 +2752,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
     try {
       await _postService.addComment(widget.postId, text);
       _controller.clear();
+      if (!mounted) return;
       FocusScope.of(context).unfocus();
     } catch (e) {
       if (!mounted) return;
@@ -3154,8 +3137,9 @@ String _initialsFor(String input) {
   return buffer.isEmpty ? trimmed[0].toUpperCase() : buffer.toString();
 }
 
+// ignore: unused_element
 class _UserWhiskeyList extends StatelessWidget {
-  const _UserWhiskeyList({super.key, required this.userId});
+  const _UserWhiskeyList({required this.userId});
 
   final String userId;
   static final WhiskeyService _whiskeyService = WhiskeyService();
@@ -3227,7 +3211,7 @@ class _UserWhiskeyList extends StatelessWidget {
       title: 'Remove whiskey',
       message: 'Delete $displayName from your library?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _whiskeyService.deleteWhiskey(whiskeyId),
@@ -3237,9 +3221,7 @@ class _UserWhiskeyList extends StatelessWidget {
 }
 
 class _UserSavedWhiskeyList extends StatelessWidget {
-  const _UserSavedWhiskeyList({
-    super.key,
-    required this.userId,
+  const _UserSavedWhiskeyList({required this.userId,
     required this.collectionName,
     required this.emptyMessage,
   });
@@ -3316,7 +3298,7 @@ class _UserSavedWhiskeyList extends StatelessWidget {
 }
 
 class _UserFavoriteDistilleriesList extends StatelessWidget {
-  const _UserFavoriteDistilleriesList({super.key, required this.userId});
+  const _UserFavoriteDistilleriesList({required this.userId});
 
   final String userId;
 
@@ -3391,7 +3373,7 @@ class _UserFavoriteDistilleriesList extends StatelessWidget {
 }
 
 class _UserFavoriteArticlesList extends StatelessWidget {
-  const _UserFavoriteArticlesList({super.key, required this.userId});
+  const _UserFavoriteArticlesList({required this.userId});
 
   final String userId;
 
@@ -3466,7 +3448,7 @@ class _UserFavoriteArticlesList extends StatelessWidget {
 }
 
 class _UserLookupSection extends StatefulWidget {
-  const _UserLookupSection({super.key});
+  const _UserLookupSection();
   @override
   State<_UserLookupSection> createState() => _UserLookupSectionState();
 }
@@ -3530,10 +3512,11 @@ class _UserLookupSectionState extends State<_UserLookupSection> {
         _results = [];
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -3670,12 +3653,13 @@ class _UserLookupSectionState extends State<_UserLookupSection> {
     }
     if (fallback.isNotEmpty) {
       final max = fallback.length < 6 ? fallback.length : 6;
-      return 'Member ' + fallback.substring(0, max);
+      return 'Member ${fallback.substring(0, max)}';
     }
     return 'Member';
   }
 
-  String _roleLabel(Map<String, dynamic> data) {
+// ignore: unused_element
+String _roleLabel(Map<String, dynamic> data) {
     return _roleValue(data) == 'admin' ? 'Admin' : 'User';
   }
 
@@ -3769,7 +3753,7 @@ class _UserLookupSectionState extends State<_UserLookupSection> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: roleValue,
+                      initialValue: roleValue,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         filled: true,
@@ -3864,8 +3848,9 @@ class _UserDetailRow extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _UserFriendsList extends StatelessWidget {
-  const _UserFriendsList({super.key, required this.userId});
+  const _UserFriendsList({required this.userId});
 
   final String userId;
   static final FriendService _friendService = FriendService();
@@ -3946,9 +3931,9 @@ class _UserFriendsList extends StatelessWidget {
     final confirmed = await _confirmDeletion(
       context,
       title: 'Remove friend',
-      message: 'Remove ${displayName} from your list?',
+      message: 'Remove $displayName from your list?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _friendService.removeFriend(friendId),
@@ -3957,8 +3942,9 @@ class _UserFriendsList extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _UserSentMessagesList extends StatelessWidget {
-  const _UserSentMessagesList({super.key, required this.userId});
+  const _UserSentMessagesList({required this.userId});
 
   final String userId;
   static final MessageService _messageService = MessageService();
@@ -3993,8 +3979,7 @@ class _UserSentMessagesList extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
                   title: Text(
-                    'To ' +
-                        (doc.data()['toDisplayName'] as String? ?? 'Member'),
+                    "To ${doc.data()['toDisplayName'] as String? ?? 'Member'}",
                     style: const TextStyle(color: AppColors.darkGreen),
                   ),
                   subtitle: Column(
@@ -4034,7 +4019,7 @@ class _UserSentMessagesList extends StatelessWidget {
       title: 'Delete message',
       message: 'This removes the sent message for you. Continue?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _messageService.deleteMessage(messageId),
@@ -4043,8 +4028,9 @@ class _UserSentMessagesList extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _UserEventList extends StatelessWidget {
-  const _UserEventList({super.key, required this.userId});
+  const _UserEventList({required this.userId});
 
   final String userId;
   static final EventService _eventService = EventService();
@@ -4102,9 +4088,9 @@ class _UserEventList extends StatelessWidget {
     final confirmed = await _confirmDeletion(
       context,
       title: 'Delete event',
-      message: 'Cancel ${displayName}?',
+      message: 'Cancel $displayName?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _eventService.deleteEvent(eventId),
@@ -4114,9 +4100,7 @@ class _UserEventList extends StatelessWidget {
 }
 
 class _WhiskeyCard extends StatelessWidget {
-  const _WhiskeyCard({
-    super.key,
-    required this.whiskeyName,
+  const _WhiskeyCard({required this.whiskeyName,
     required this.style,
     required this.region,
     required this.notes,
@@ -4204,10 +4188,7 @@ class _WhiskeyCard extends StatelessWidget {
             if (showAuthor) ...[
               const SizedBox(height: 12),
               Text(
-                'Shared by ' +
-                    authorLabel +
-                    ' on ' +
-                    '${timestamp.month}/${timestamp.day}/${timestamp.year}',
+                'Shared by $authorLabel on ${timestamp.month}/${timestamp.day}/${timestamp.year}',
                 style: descriptionStyle,
               ),
             ],
@@ -4219,7 +4200,7 @@ class _WhiskeyCard extends StatelessWidget {
 }
 
 class _AddWhiskeySheet extends StatefulWidget {
-  const _AddWhiskeySheet({super.key});
+  const _AddWhiskeySheet();
 
   @override
   State<_AddWhiskeySheet> createState() => _AddWhiskeySheetState();
@@ -4256,8 +4237,8 @@ class _AddWhiskeySheetState extends State<_AddWhiskeySheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not add whiskey: ' + e.toString())));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not add whiskey: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -4296,7 +4277,7 @@ class _AddWhiskeySheetState extends State<_AddWhiskeySheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _style,
+              initialValue: _style,
               decoration: const InputDecoration(labelText: 'Style'),
               items: [
                 for (final style in whiskeyStyles)
@@ -4342,8 +4323,9 @@ class _AddWhiskeySheetState extends State<_AddWhiskeySheet> {
   }
 }
 
+// ignore: unused_element
 class _UserDistilleryList extends StatelessWidget {
-  const _UserDistilleryList({super.key, required this.userId});
+  const _UserDistilleryList({required this.userId});
 
   final String userId;
   static final DistilleryService _distilleryService = DistilleryService();
@@ -4418,7 +4400,7 @@ class _UserDistilleryList extends StatelessWidget {
       title: 'Remove distillery',
       message: 'Delete $displayName from your spotlights?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _distilleryService.deleteDistillery(distilleryId),
@@ -4514,10 +4496,7 @@ class _DistilleryCard extends StatelessWidget {
             if (showAuthor) ...[
               const SizedBox(height: 12),
               Text(
-                'Shared by ' +
-                    authorLabel +
-                    ' on '
-                        ' \${timestamp.month}/\${timestamp.day}/\${timestamp.year}',
+                'Shared by $authorLabel on ${timestamp.month}/${timestamp.day}/${timestamp.year}',
                 style: descriptionStyle,
               ),
             ],
@@ -4529,7 +4508,7 @@ class _DistilleryCard extends StatelessWidget {
 }
 
 class _AddDistillerySheet extends StatefulWidget {
-  const _AddDistillerySheet({super.key});
+  const _AddDistillerySheet();
 
   @override
   State<_AddDistillerySheet> createState() => _AddDistillerySheetState();
@@ -4565,8 +4544,8 @@ class _AddDistillerySheetState extends State<_AddDistillerySheet> {
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Could not add distillery: ' + e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not add distillery: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -4643,8 +4622,9 @@ class _AddDistillerySheetState extends State<_AddDistillerySheet> {
   }
 }
 
+// ignore: unused_element
 class _UserArticleList extends StatelessWidget {
-  const _UserArticleList({super.key, required this.userId});
+  const _UserArticleList({required this.userId});
 
   final String userId;
   static final ArticleService _articleService = ArticleService();
@@ -4714,9 +4694,9 @@ class _UserArticleList extends StatelessWidget {
     final confirmed = await _confirmDeletion(
       context,
       title: 'Remove article',
-      message: 'Delete ${displayName} from your archive?',
+      message: 'Delete $displayName from your archive?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _articleService.deleteArticle(articleId),
@@ -4831,7 +4811,7 @@ class _ArticleCard extends StatelessWidget {
 }
 
 class _AddArticleSheet extends StatefulWidget {
-  const _AddArticleSheet({super.key});
+  const _AddArticleSheet();
 
   @override
   State<_AddArticleSheet> createState() => _AddArticleSheetState();
@@ -4906,7 +4886,7 @@ class _AddArticleSheetState extends State<_AddArticleSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: [
                 for (final category in articleCategories)
@@ -4952,8 +4932,9 @@ class _AddArticleSheetState extends State<_AddArticleSheet> {
   }
 }
 
+// ignore: unused_element
 class _UserMerchList extends StatelessWidget {
-  const _UserMerchList({super.key, required this.userId});
+  const _UserMerchList({required this.userId});
 
   final String userId;
   static final MerchandiseService _merchService = MerchandiseService();
@@ -5026,7 +5007,7 @@ class _UserMerchList extends StatelessWidget {
       title: 'Remove item',
       message: 'Delete $displayName from your merchandise?',
     );
-    if (!confirmed) return;
+    if (!confirmed || !context.mounted) return;
     await _performDeletion(
       context,
       action: () => _merchService.deleteItem(itemId),
@@ -5146,7 +5127,7 @@ class _MerchCard extends StatelessWidget {
 }
 
 class _AddMerchSheet extends StatefulWidget {
-  const _AddMerchSheet({super.key});
+  const _AddMerchSheet();
 
   @override
   State<_AddMerchSheet> createState() => _AddMerchSheetState();
@@ -5185,7 +5166,7 @@ class _AddMerchSheetState extends State<_AddMerchSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not add item: ')));
+            .showSnackBar(SnackBar(content: Text('Could not add item: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -5224,7 +5205,7 @@ class _AddMerchSheetState extends State<_AddMerchSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: [
                 for (final category in merchCategories)
@@ -5283,7 +5264,7 @@ class _AddMerchSheetState extends State<_AddMerchSheet> {
 }
 
 class _AddEventSheet extends StatefulWidget {
-  const _AddEventSheet({super.key});
+  const _AddEventSheet();
 
   @override
   State<_AddEventSheet> createState() => _AddEventSheetState();
@@ -5387,7 +5368,7 @@ class _AddEventSheetState extends State<_AddEventSheet> {
             OutlinedButton.icon(
               onPressed: _isSaving ? null : _pickDate,
               icon: const Icon(Icons.event),
-              label: Text('Date: ' + dateLabel),
+              label: Text('Date: $dateLabel'),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -5418,7 +5399,7 @@ class _AddEventSheetState extends State<_AddEventSheet> {
 }
 
 class _CaptionDialog extends StatefulWidget {
-  const _CaptionDialog({super.key});
+  const _CaptionDialog();
 
   @override
   State<_CaptionDialog> createState() => _CaptionDialogState();
@@ -5723,7 +5704,7 @@ class _ShowcaseCard extends StatelessWidget {
 }
 
 class _LibraryDatabaseSheet extends StatefulWidget {
-  const _LibraryDatabaseSheet({super.key});
+  const _LibraryDatabaseSheet();
 
   @override
   State<_LibraryDatabaseSheet> createState() => _LibraryDatabaseSheetState();
@@ -6412,7 +6393,7 @@ class _MerchDatabasePageState extends State<MerchDatabasePage> {
               ),
             ),
             const SizedBox(height: 12),
-            Expanded(
+            const Expanded(
               child: _MerchandiseFeed(),
             ),
           ],
@@ -7058,7 +7039,7 @@ class _ComposeMessageSheetState extends State<_ComposeMessageSheet> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _selectedFriendId,
+            initialValue: _selectedFriendId,
             items: [
               for (final friend in widget.friends)
                 DropdownMenuItem(
@@ -7502,7 +7483,7 @@ class ProfilePage extends StatelessWidget {
         final emailVerified =
             userData['emailVerified'] as bool? ?? user.emailVerified;
 
-        Future<void> _saveProfileData(Map<String, dynamic> data,
+        Future<void> saveProfileData(Map<String, dynamic> data,
             {String? successMessage}) async {
           try {
             await docRef.set(data, SetOptions(merge: true));
@@ -7566,7 +7547,7 @@ class ProfilePage extends StatelessWidget {
               postalCode: postalCode,
               allowLocationBasedFeatures: allowLocationBasedFeatures,
               birthYear: birthYear,
-              onSave: _saveProfileData,
+              onSave: saveProfileData,
               onMembershipChanged: updateMembership,
             ),
             const SizedBox(height: 32),
@@ -7663,6 +7644,7 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _PageLayout extends StatelessWidget {
   final String title;
   final String description;
@@ -7707,5 +7689,21 @@ class _PageLayout extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
