@@ -793,7 +793,7 @@ class _SocialPageState extends State<SocialPage> {
           _HeaderActionButton(
             tooltip: 'Search Members',
             onPressed: _openUserSearchDialog,
-            child: const Icon(Icons.search_rounded, size: 30),
+            child: const Icon(Icons.search_rounded, size: 28),
           ),
         ],
       ),
@@ -860,6 +860,12 @@ class _HeaderActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDisabled = onPressed == null;
+    final borderColor = isDisabled
+        ? AppColors.leather.withValues(alpha: 0.4)
+        : AppColors.leather;
+    final iconColor = borderColor;
+
     final button = InkWell(
       onTap: onPressed,
       borderRadius: BorderRadius.circular(14),
@@ -867,14 +873,13 @@ class _HeaderActionButton extends StatelessWidget {
         width: 56,
         height: 56,
         decoration: BoxDecoration(
-          color: onPressed == null
-              ? AppColors.leather.withValues(alpha: 0.2)
-              : AppColors.leather,
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor, width: 2),
         ),
         alignment: Alignment.center,
         child: IconTheme.merge(
-          data: const IconThemeData(color: AppColors.onDark),
+          data: IconThemeData(color: iconColor, size: 30),
           child: child,
         ),
       ),
