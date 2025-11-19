@@ -748,6 +748,17 @@ class _SocialPageState extends State<SocialPage> {
       padding: const EdgeInsets.only(bottom: 32),
       children: [
         _buildSocialHeader(),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Text(
+            'HI',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.darkGreen,
+            ),
+          ),
+        ),
         child,
       ],
     );
