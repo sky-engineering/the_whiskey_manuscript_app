@@ -678,7 +678,7 @@ class _SocialPageState extends State<SocialPage> {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.only(top: 12, bottom: 32),
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final doc = docs[index];
@@ -695,15 +695,16 @@ class _SocialPageState extends State<SocialPage> {
             final currentUserId = _auth.currentUser?.uid;
             final isLiked =
                 currentUserId != null && likedBy.contains(currentUserId);
-            final canAddFriend = postOwnerId != null &&
+            bool alreadyFriend = false;
+            VoidCallback? addFriendCallback;
+            if (postOwnerId != null &&
                 currentUserId != null &&
-                postOwnerId != currentUserId;
-            final alreadyFriend =
-                canAddFriend && _friendIds.contains(postOwnerId);
-            final VoidCallback? addFriendCallback =
-                (!alreadyFriend && canAddFriend)
-                    ? () => _addFriend(postOwnerId)
-                    : null;
+                postOwnerId != currentUserId) {
+              alreadyFriend = _friendIds.contains(postOwnerId);
+              if (!alreadyFriend) {
+                addFriendCallback = () => _addFriend(postOwnerId);
+              }
+            }
 
             return _PostCard(
               authorLabel: email,
@@ -2354,18 +2355,13 @@ class _PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 20),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      clipBehavior: Clip.hardEdge,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2422,7 +2418,7 @@ class _PostCard extends StatelessWidget {
             ),
           if (caption.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Text(
                 caption,
                 style: const TextStyle(
@@ -2434,7 +2430,7 @@ class _PostCard extends StatelessWidget {
           if ((onToggleLike != null || likeCount != null) ||
               onOpenComments != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Wrap(
                 spacing: 24,
                 runSpacing: 8,
