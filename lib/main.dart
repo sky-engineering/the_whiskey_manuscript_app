@@ -692,7 +692,16 @@ class _SocialPageState extends State<SocialPage> {
             final doc = docs[index - 1];
             final data = doc.data();
             final imageUrl = data['imageUrl'] as String?;
-            final email = data['email'] as String? ?? 'Unknown user';
+            final firstName = (data['firstName'] as String?)?.trim();
+            final lastName = (data['lastName'] as String?)?.trim();
+            final displayName = (data['displayName'] as String?)?.trim();
+            final email = (data['email'] as String?)?.trim();
+            final resolvedName = _resolvePostAuthorName(
+              firstName: firstName,
+              lastName: lastName,
+              displayName: displayName,
+              fallbackEmail: email,
+            );
             final caption = (data['caption'] as String? ?? '').trim();
             final timestamp = _coerceTimestamp(data['timestamp']);
             final likedBy =
@@ -715,7 +724,7 @@ class _SocialPageState extends State<SocialPage> {
             }
 
             return _PostCard(
-              authorLabel: email,
+              authorLabel: resolvedName,
               timestamp: timestamp,
               imageUrl: imageUrl,
               caption: caption,
@@ -961,12 +970,21 @@ class _UserPostsListState extends State<_UserPostsList> {
         return Column(
           children: docs.map((doc) {
             final data = doc.data();
+            final firstName = (data['firstName'] as String?)?.trim();
+            final lastName = (data['lastName'] as String?)?.trim();
+            final displayName = (data['displayName'] as String?)?.trim();
+            final email = (data['email'] as String?)?.trim();
             final likedBy =
                 List<String>.from((data['likedBy'] as List<dynamic>? ?? []));
             final likeCount = data['likeCount'] as int? ?? likedBy.length;
             final commentCount = data['commentCount'] as int? ?? 0;
             return _PostCard(
-              authorLabel: (data['email'] as String? ?? 'You').trim(),
+              authorLabel: _resolvePostAuthorName(
+                firstName: firstName,
+                lastName: lastName,
+                displayName: displayName,
+                fallbackEmail: email ?? 'You',
+              ),
               timestamp: _coerceTimestamp(data['timestamp']),
               imageUrl: data['imageUrl'] as String?,
               caption: (data['caption'] as String? ?? '').trim(),
@@ -2481,7 +2499,9 @@ class _PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
+          Container(
+            width: double.infinity,
+            color: AppColors.neutralLight,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2546,7 +2566,7 @@ class _PostCard extends StatelessWidget {
               height: 300,
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
               children: [
                 _buildReactionIcon(
@@ -2556,7 +2576,7 @@ class _PostCard extends StatelessWidget {
                       : AppColors.leatherDark,
                   onPressed: onToggleLike,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 3),
                 GestureDetector(
                   onTap: onShowLikes,
                   child: Text(
@@ -2567,13 +2587,13 @@ class _PostCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 14),
                 _buildReactionIcon(
                   icon: Icons.mode_comment_outlined,
                   color: AppColors.leatherDark,
                   onPressed: onOpenComments,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 3),
                 Text(
                   '$commentTotal',
                   style: const TextStyle(
@@ -2585,7 +2605,7 @@ class _PostCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
             child: RichText(
               text: TextSpan(
                 style: const TextStyle(
@@ -2633,7 +2653,7 @@ class _PostCard extends StatelessWidget {
 
   static String _formatDate(DateTime timestamp) =>
       '${timestamp.month}/${timestamp.day}/${timestamp.year}';
-  Widget _buildReactionIcon({
+Widget _buildReactionIcon({
     required IconData icon,
     Color? color,
     VoidCallback? onPressed,
@@ -2646,6 +2666,29 @@ class _PostCard extends StatelessWidget {
       icon: Icon(icon, color: color ?? AppColors.leatherDark),
     );
   }
+}
+
+String _resolvePostAuthorName({
+  String? firstName,
+  String? lastName,
+  String? displayName,
+  String? fallbackEmail,
+}) {
+  final parts = [firstName, lastName]
+      .map((part) => part?.trim())
+      .whereType<String>()
+      .where((value) => value.isNotEmpty)
+      .toList();
+  if (parts.isNotEmpty) {
+    return parts.join(' ');
+  }
+  if (displayName != null && displayName.trim().isNotEmpty) {
+    return displayName.trim();
+  }
+  if (fallbackEmail != null && fallbackEmail.trim().isNotEmpty) {
+    return fallbackEmail.trim();
+  }
+  return 'Whiskey User';
 }
 
 Future<void> showFriendsBottomSheet(BuildContext context,
