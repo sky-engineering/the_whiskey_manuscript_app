@@ -783,17 +783,17 @@ class _SocialPageState extends State<SocialPage> {
             onPressed: _isPosting ? null : _uploadPost,
             child: _isPosting
                 ? const SizedBox(
-                    width: 30,
-                    height: 30,
+                    width: 22,
+                    height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.add, size: 30),
+                : const Icon(Icons.add, size: 22),
           ),
           const SizedBox(width: 12),
           _HeaderActionButton(
             tooltip: 'Search Members',
             onPressed: _openUserSearchDialog,
-            child: const Icon(Icons.search_rounded, size: 28),
+            child: const Icon(Icons.search_rounded, size: 22),
           ),
         ],
       ),
@@ -870,16 +870,16 @@ class _HeaderActionButton extends StatelessWidget {
       onTap: onPressed,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        width: 56,
-        height: 56,
+        width: 42,
+        height: 42,
         decoration: BoxDecoration(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: borderColor, width: 2),
         ),
         alignment: Alignment.center,
         child: IconTheme.merge(
-          data: IconThemeData(color: iconColor, size: 30),
+          data: IconThemeData(color: iconColor, size: 22),
           child: child,
         ),
       ),
