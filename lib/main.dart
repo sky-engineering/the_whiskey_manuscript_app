@@ -462,48 +462,48 @@ class _SocialPageState extends State<SocialPage> {
   final PostService _postService = PostService();
   final FriendService _friendService = FriendService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _friendsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _followingSub;
   StreamSubscription<User?>? _authSub;
-  Set<String> _friendIds = <String>{};
+  Set<String> _followingIds = <String>{};
   bool _isPosting = false;
 
   @override
   void initState() {
     super.initState();
-    _listenForFriends();
+    _listenForFollowing();
     _authSub = _auth.userChanges().listen((_) {
-      _listenForFriends();
+      _listenForFollowing();
     });
   }
 
   @override
   void dispose() {
-    _friendsSub?.cancel();
+    _followingSub?.cancel();
     _authSub?.cancel();
     super.dispose();
   }
 
-  void _listenForFriends() {
+  void _listenForFollowing() {
     final userId = _auth.currentUser?.uid;
-    _friendsSub?.cancel();
+    _followingSub?.cancel();
     if (userId == null) {
       if (mounted) {
         setState(() {
-          _friendIds = <String>{};
+          _followingIds = <String>{};
         });
       }
       return;
     }
 
-    _friendsSub = FirebaseFirestore.instance
+    _followingSub = FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
-        .collection('friends')
+        .collection('following')
         .snapshots()
         .listen((snapshot) {
       if (!mounted) return;
       setState(() {
-        _friendIds = snapshot.docs.map((doc) => doc.id).toSet();
+        _followingIds = snapshot.docs.map((doc) => doc.id).toSet();
       });
     });
   }
@@ -518,7 +518,7 @@ class _SocialPageState extends State<SocialPage> {
       return;
     }
 
-    if (_friendIds.contains(friendUserId)) {
+    if (_followingIds.contains(friendUserId)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Already in your circle.')),
@@ -708,7 +708,7 @@ class _SocialPageState extends State<SocialPage> {
             if (postOwnerId != null &&
                 currentUserId != null &&
                 postOwnerId != currentUserId) {
-              alreadyFriend = _friendIds.contains(postOwnerId);
+              alreadyFriend = _followingIds.contains(postOwnerId);
               if (!alreadyFriend) {
                 addFriendCallback = () => _addFriend(postOwnerId);
               }
