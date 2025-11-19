@@ -624,21 +624,6 @@ class _SocialPageState extends State<SocialPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.leather,
-        foregroundColor: AppColors.onDark,
-        onPressed: _isPosting ? null : _uploadPost,
-        child: _isPosting
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.onDark),
-                ),
-              )
-            : const Icon(Icons.add_a_photo_rounded),
-      ),
       body: Stack(
         children: [
           _buildFeed(),
@@ -667,29 +652,44 @@ class _SocialPageState extends State<SocialPage> {
       stream: stream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return _FeedMessage(
-            message: 'We could not load the social feed.',
-            actionLabel: 'Retry',
-            onAction: () => setState(() {}),
+          return _buildFeedContainer(
+            _FeedMessage(
+              message: 'We could not load the social feed.',
+              actionLabel: 'Retry',
+              onAction: () => setState(() {}),
+            ),
           );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const _FeedMessage(
-            message: 'No posts yet.\nBe the first to raise a glass!',
+          return _buildFeedContainer(
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
           );
         }
 
+        final docs = snapshot.data?.docs ?? [];
+        final hasPosts = docs.isNotEmpty;
         return ListView.builder(
-          padding: const EdgeInsets.only(top: 12, bottom: 32),
-          itemCount: docs.length,
+          padding: const EdgeInsets.only(bottom: 32),
+          itemCount: hasPosts ? docs.length + 1 : 2,
           itemBuilder: (context, index) {
-            final doc = docs[index];
+            if (index == 0) {
+              return _buildSocialHeader();
+            }
+
+            if (!hasPosts) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+                child: _FeedMessage(
+                  message: 'No posts yet.\nBe the first to raise a glass!',
+                ),
+              );
+            }
+
+            final doc = docs[index - 1];
             final data = doc.data();
             final imageUrl = data['imageUrl'] as String?;
             final email = data['email'] as String? ?? 'Unknown user';
@@ -729,6 +729,117 @@ class _SocialPageState extends State<SocialPage> {
               onTap: () => _openPostDetail(doc.id),
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildFeedContainer(Widget child) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        _buildSocialHeader(),
+        child,
+      ],
+    );
+  }
+
+  Widget _buildSocialHeader() {
+    final user = _auth.currentUser;
+    final displayName = (user?.displayName?.trim().isNotEmpty ?? false)
+        ? user!.displayName!.trim()
+        : (user?.email ?? 'Member');
+    final initials = _initialsFor(displayName);
+    final photoUrl = user?.photoURL;
+
+    Widget avatar;
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      avatar = CircleAvatar(
+        radius: 26,
+        backgroundImage: NetworkImage(photoUrl),
+      );
+    } else {
+      avatar = CircleAvatar(
+        radius: 26,
+        backgroundColor: AppColors.leather.withValues(alpha: 0.2),
+        child: Text(
+          initials,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: AppColors.leather,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          avatar,
+          const Spacer(),
+          IconButton(
+            tooltip: 'New Post',
+            onPressed: _isPosting ? null : _uploadPost,
+            icon: _isPosting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_a_photo_rounded),
+          ),
+          IconButton(
+            tooltip: 'Search Members',
+            onPressed: _openUserSearchDialog,
+            icon: const Icon(Icons.person_search_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openUserSearchDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Find Members',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                color: AppColors.darkGreen,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const _UserLookupSection(),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -3657,7 +3768,9 @@ class _UserLookupSectionState extends State<_UserLookupSection> {
         final matchesQuery = _matchesTerm(data['displayName'], keyword) ||
             _matchesTerm(data['firstName'], keyword) ||
             _matchesTerm(data['lastName'], keyword) ||
-            _matchesTerm(data['email'], keyword);
+            _matchesTerm(data['email'], keyword) ||
+            _matchesTerm(data['postalCode'], keyword) ||
+            _matchesTerm(data['zipCode'], keyword);
         if (matchesQuery) {
           matches.add(_LookupUser(id: doc.id, data: data));
         }
