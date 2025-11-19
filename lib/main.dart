@@ -726,7 +726,6 @@ class _SocialPageState extends State<SocialPage> {
               onShowLikes: () => _showLikesSheet(likedBy),
               onOpenComments: () => _openComments(doc.id),
               onAddFriend: addFriendCallback,
-              isFriend: alreadyFriend,
               onTap: () => _openPostDetail(doc.id),
             );
           },
@@ -2353,7 +2352,6 @@ class _PostCard extends StatelessWidget {
     this.onShowLikes,
     this.onOpenComments,
     this.onAddFriend,
-    this.isFriend = false,
     this.onDelete,
     this.onTap,
   });
@@ -2369,7 +2367,6 @@ class _PostCard extends StatelessWidget {
   final VoidCallback? onShowLikes;
   final VoidCallback? onOpenComments;
   final VoidCallback? onAddFriend;
-  final bool isFriend;
   final VoidCallback? onDelete;
   final VoidCallback? onTap;
 
@@ -2389,12 +2386,43 @@ class _PostCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        authorLabel,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.darkGreen,
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              authorLabel,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.darkGreen,
+                              ),
+                            ),
+                          ),
+                          if (onAddFriend != null)
+                            GestureDetector(
+                              onTap: onAddFriend,
+                              child: Container(
+                                margin: const EdgeInsets.only(left: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.leather),
+                                  color: Colors.transparent,
+                                ),
+                                child: const Text(
+                                  'Follow',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.leather,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -2407,16 +2435,6 @@ class _PostCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onAddFriend != null || isFriend)
-                  IconButton(
-                    onPressed: isFriend ? null : onAddFriend,
-                    tooltip: isFriend ? 'Friends' : 'Add friend',
-                    icon: Icon(
-                      isFriend ? Icons.person_rounded : Icons.person_add_alt_1,
-                      color:
-                          isFriend ? AppColors.leather : AppColors.leatherDark,
-                    ),
-                  ),
                 if (onDelete != null)
                   IconButton(
                     onPressed: onDelete,
