@@ -412,23 +412,21 @@ class _DashboardShellState extends State<DashboardShell> {
     final mediaQuery = MediaQuery.of(context);
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(280),
+        preferredSize: const Size.fromHeight(64),
         child: Container(
           color: AppColors.neutralLight,
           padding: EdgeInsets.only(
             left: 16,
             right: 16,
-            top: mediaQuery.padding.top + 8,
-            bottom: 8,
+            top: mediaQuery.padding.top + 4,
+            bottom: 4,
           ),
-          alignment: Alignment.bottomLeft,
-          child: SizedBox(
-            width: 256,
-            height: 256,
-            child: SvgPicture.asset(
-              'assets/images/logo/TWM_Mark_Primary.svg',
-              fit: BoxFit.contain,
-            ),
+          alignment: Alignment.centerLeft,
+          child: SvgPicture.asset(
+            'assets/images/logo/TWM_Mark_Primary.svg',
+            width: 32,
+            height: 32,
+            fit: BoxFit.contain,
           ),
         ),
       ),
