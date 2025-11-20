@@ -113,9 +113,35 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.auth.uid == request.resource.data.userId
         && request.resource.data.keys().hasOnly([
-          'userId','userName','userEmail','membershipLevel','name','region','notes','style','createdAt'])
+          'userId','userName','userEmail','membershipLevel','name','brand','distilleryId','distilleryName',
+          'country','countryCode','region','category','subCategory','ageStatement','abv','proof',
+          'releaseType','vintageOrBatch','yearReleased','msrp','priceLow','priceHigh','rarityLevel',
+          'availabilityStatus','shortDescription','notes','tags','isHighlighted','imageUrl','style','createdAt'])
         && request.resource.data.name is string && request.resource.data.name.size() > 0
-        && request.resource.data.region is string && request.resource.data.notes is string
+        && request.resource.data.country is string && request.resource.data.country.size() > 0
+        && request.resource.data.region is string && request.resource.data.region.size() > 0
+        && request.resource.data.category is string && request.resource.data.category.size() > 0
+        && request.resource.data.subCategory is string
+        && request.resource.data.ageStatement is string
+        && request.resource.data.abv is number
+        && (request.resource.data.proof == null || request.resource.data.proof is number)
+        && request.resource.data.releaseType is string && request.resource.data.releaseType.size() > 0
+        && (request.resource.data.brand == null || request.resource.data.brand is string)
+        && (request.resource.data.distilleryId == null || request.resource.data.distilleryId is string)
+        && (request.resource.data.distilleryName == null || request.resource.data.distilleryName is string)
+        && (request.resource.data.countryCode == null || request.resource.data.countryCode is string)
+        && (request.resource.data.vintageOrBatch == null || request.resource.data.vintageOrBatch is string)
+        && (request.resource.data.yearReleased == null || request.resource.data.yearReleased is number)
+        && request.resource.data.msrp is number
+        && request.resource.data.priceLow is number
+        && request.resource.data.priceHigh is number
+        && request.resource.data.rarityLevel is string
+        && request.resource.data.availabilityStatus is string
+        && request.resource.data.shortDescription is string
+        && request.resource.data.notes is string
+        && request.resource.data.tags is list
+        && request.resource.data.isHighlighted is bool
+        && (request.resource.data.imageUrl == null || request.resource.data.imageUrl is string)
         && request.resource.data.style is string
         && request.resource.data.createdAt == request.time;
       allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;

@@ -7,7 +7,8 @@ class PostUploader {
   final ImagePicker _picker = ImagePicker();
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  Future<String?> pickAndUploadImage() async {
+  Future<String?> pickAndUploadImage(
+      {String destinationFolder = 'posts'}) async {
     // Pick an image from the gallery
     final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return null;
@@ -15,8 +16,8 @@ class PostUploader {
     final file = File(picked.path);
     final id = const Uuid().v4();
 
-    // Store at: posts/<uuid>.jpg
-    final ref = _storage.ref().child('posts/$id.jpg');
+    // Store at: <folder>/<uuid>.jpg
+    final ref = _storage.ref().child('$destinationFolder/$id.jpg');
 
     // Upload file
     await ref.putFile(file);

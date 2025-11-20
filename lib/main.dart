@@ -59,6 +59,50 @@ const List<String> whiskeyStyles = [
   'Other',
 ];
 
+const List<String> whiskeyCategories = [
+  'Scotch',
+  'Bourbon',
+  'Rye',
+  'Irish',
+  'Japanese',
+  'American',
+  'Canadian',
+  'World',
+];
+
+const List<String> whiskeySubCategories = [
+  'Single Malt',
+  'Blended Malt',
+  'Single Grain',
+  'Blended Whiskey',
+  'Cask Strength',
+  'Finished',
+  'Single Barrel',
+  'Small Batch',
+  'Other',
+];
+
+const List<String> whiskeyReleaseTypes = [
+  'Standard',
+  'Single Barrel',
+  'Store Pick',
+  'Limited Release',
+];
+
+const List<String> whiskeyRarityLevels = [
+  'Everyday',
+  'Limited',
+  'Annual',
+  'Ultra-Rare',
+];
+
+const List<String> whiskeyAvailabilityStatuses = [
+  'Common',
+  'Hard-to-Find',
+  'Limited',
+  'Discontinued',
+];
+
 const List<String> distillerySpotlights = [
   'Heritage House',
   'Experimental Lab',
@@ -839,13 +883,11 @@ class _SocialPageState extends State<SocialPage> {
                       children: [
                         Text(
                           'Find Members',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: AppColors.darkGreen,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppColors.darkGreen,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                         IconButton(
                           tooltip: 'Close',
@@ -1149,7 +1191,8 @@ Future<void> _showFollowingSheet(BuildContext context,
 }
 
 class _RelationshipList extends StatefulWidget {
-  const _RelationshipList({required this.userId,
+  const _RelationshipList({
+    required this.userId,
     required this.collection,
     required this.emptyLabel,
     required this.title,
@@ -1392,7 +1435,8 @@ class _RelationshipListState extends State<_RelationshipList> {
 }
 
 class _ProfileStatChip extends StatelessWidget {
-  const _ProfileStatChip({required this.label,
+  const _ProfileStatChip({
+    required this.label,
     this.onTap,
   });
 
@@ -1425,7 +1469,8 @@ class _ProfileStatChip extends StatelessWidget {
 }
 
 class _ProfileInfoRow extends StatelessWidget {
-  const _ProfileInfoRow({required this.label,
+  const _ProfileInfoRow({
+    required this.label,
     this.value,
     this.allowCopy = false,
   });
@@ -1463,7 +1508,8 @@ class _ProfileInfoRow extends StatelessWidget {
 }
 
 class _ProfileEditableField extends StatelessWidget {
-  const _ProfileEditableField({required this.label,
+  const _ProfileEditableField({
+    required this.label,
     required this.controller,
     this.keyboardType,
     this.textCapitalization = TextCapitalization.words,
@@ -1505,7 +1551,9 @@ class _ProfileEditableField extends StatelessWidget {
 }
 
 class MembershipDetailsPage extends StatefulWidget {
-  const MembershipDetailsPage({super.key, required this.userId,
+  const MembershipDetailsPage({
+    super.key,
+    required this.userId,
     this.fallbackTier,
   });
 
@@ -1679,7 +1727,8 @@ class _MembershipFieldTileData {
 }
 
 class _MembershipFieldTile extends StatelessWidget {
-  const _MembershipFieldTile({required this.label,
+  const _MembershipFieldTile({
+    required this.label,
     required this.value,
   });
 
@@ -1708,7 +1757,8 @@ class _MembershipFieldTile extends StatelessWidget {
 }
 
 class _ProfileInfoCard extends StatefulWidget {
-  const _ProfileInfoCard({required this.userId,
+  const _ProfileInfoCard({
+    required this.userId,
     required this.initials,
     required this.primaryName,
     required this.email,
@@ -2594,7 +2644,8 @@ class _PostCard extends StatelessWidget {
             child: Row(
               children: [
                 _buildReactionIcon(
-                  icon: isLiked == true ? Icons.favorite : Icons.favorite_border,
+                  icon:
+                      isLiked == true ? Icons.favorite : Icons.favorite_border,
                   color: isLiked == true
                       ? AppColors.leather
                       : AppColors.leatherDark,
@@ -2638,7 +2689,7 @@ class _PostCard extends StatelessWidget {
                 ),
                 children: [
                   TextSpan(
-                    text: '$resolvedAuthor ' ,
+                    text: '$resolvedAuthor ',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   if (caption.isNotEmpty)
@@ -2677,7 +2728,7 @@ class _PostCard extends StatelessWidget {
 
   static String _formatDate(DateTime timestamp) =>
       '${timestamp.month}/${timestamp.day}/${timestamp.year}';
-Widget _buildReactionIcon({
+  Widget _buildReactionIcon({
     required IconData icon,
     Color? color,
     VoidCallback? onPressed,
@@ -3068,8 +3119,8 @@ class _PostCommentsViewState extends State<PostCommentsView> {
 
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     const basePadding = EdgeInsets.fromLTRB(24, 16, 24, 16);
-    final resolvedPadding =
-        (widget.padding ?? basePadding).add(EdgeInsets.only(bottom: viewInsets));
+    final resolvedPadding = (widget.padding ?? basePadding)
+        .add(EdgeInsets.only(bottom: viewInsets));
 
     return SafeArea(
       top: !widget.showHandle,
@@ -3476,11 +3527,8 @@ class _UserWhiskeyList extends StatelessWidget {
         return Column(
           children: [
             for (final doc in docs)
-              _WhiskeyCard(
-                whiskeyName: doc.data()['name'] as String? ?? 'Untitled Bottle',
-                style: doc.data()['style'] as String? ?? 'Special Release',
-                region: doc.data()['region'] as String? ?? 'Unknown region',
-                notes: doc.data()['notes'] as String? ?? '',
+              _buildWhiskeyCardFromData(
+                doc.data(),
                 authorLabel: 'You',
                 membership: doc.data()['membershipLevel'] as String?,
                 timestamp: _coerceTimestamp(doc.data()['createdAt']),
@@ -3519,7 +3567,8 @@ class _UserWhiskeyList extends StatelessWidget {
 }
 
 class _UserSavedWhiskeyList extends StatelessWidget {
-  const _UserSavedWhiskeyList({required this.userId,
+  const _UserSavedWhiskeyList({
+    required this.userId,
     required this.collectionName,
     required this.emptyMessage,
   });
@@ -3959,7 +4008,7 @@ class _UserLookupSectionState extends State<_UserLookupSection> {
   }
 
 // ignore: unused_element
-String _roleLabel(Map<String, dynamic> data) {
+  String _roleLabel(Map<String, dynamic> data) {
     return _roleValue(data) == 'admin' ? 'Admin' : 'User';
   }
 
@@ -4400,33 +4449,97 @@ class _UserEventList extends StatelessWidget {
 }
 
 class _WhiskeyCard extends StatelessWidget {
-  const _WhiskeyCard({required this.whiskeyName,
-    required this.style,
+  const _WhiskeyCard({
+    required this.whiskeyName,
+    required this.categoryLabel,
     required this.region,
-    required this.notes,
+    required this.shortDescription,
     required this.authorLabel,
     required this.timestamp,
+    this.brand,
+    this.distilleryName,
+    this.country,
+    this.subCategory,
+    this.ageStatement,
+    this.abv,
+    this.proof,
+    this.releaseType,
+    this.vintageOrBatch,
+    this.yearReleased,
+    this.msrp,
+    this.priceLow,
+    this.priceHigh,
+    this.rarityLevel,
+    this.availabilityStatus,
+    this.tags = const [],
+    this.isHighlighted = false,
+    this.imageUrl,
     this.membership,
     this.showAuthor = true,
     this.onDelete,
   });
 
   final String whiskeyName;
-  final String style;
+  final String categoryLabel;
   final String region;
-  final String notes;
+  final String shortDescription;
   final String authorLabel;
   final DateTime timestamp;
+  final String? brand;
+  final String? distilleryName;
+  final String? country;
+  final String? subCategory;
+  final String? ageStatement;
+  final double? abv;
+  final double? proof;
+  final String? releaseType;
+  final String? vintageOrBatch;
+  final int? yearReleased;
+  final double? msrp;
+  final double? priceLow;
+  final double? priceHigh;
+  final String? rarityLevel;
+  final String? availabilityStatus;
+  final List<String> tags;
+  final bool isHighlighted;
+  final String? imageUrl;
   final String? membership;
   final bool showAuthor;
   final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final descriptionStyle = Theme.of(context)
-        .textTheme
-        .bodyMedium
-        ?.copyWith(color: AppColors.leatherDark);
+    final textTheme = Theme.of(context).textTheme;
+    final descriptionStyle =
+        textTheme.bodyMedium?.copyWith(color: AppColors.leatherDark);
+    final pillWidgets = <Widget>[
+      if ((subCategory ?? '').trim().isNotEmpty)
+        _buildPill(subCategory!.trim()),
+      if ((ageStatement ?? '').trim().isNotEmpty)
+        _buildPill(ageStatement!.trim()),
+      if (abv != null) _buildPill('${abv!.toStringAsFixed(1)}% ABV'),
+      if (proof != null) _buildPill('${proof!.toStringAsFixed(1)} proof'),
+      if ((releaseType ?? '').trim().isNotEmpty)
+        _buildPill(releaseType!.trim()),
+      if ((vintageOrBatch ?? '').trim().isNotEmpty)
+        _buildPill('Batch ${vintageOrBatch!.trim()}'),
+      if (yearReleased != null) _buildPill('Released $yearReleased'),
+      if ((rarityLevel ?? '').trim().isNotEmpty)
+        _buildPill('Rarity: ${rarityLevel!.trim()}'),
+      if ((availabilityStatus ?? '').trim().isNotEmpty)
+        _buildPill('Availability: ${availabilityStatus!.trim()}'),
+    ];
+
+    final originParts = <String>[
+      if ((country ?? '').trim().isNotEmpty) country!.trim(),
+      if (region.trim().isNotEmpty) region.trim(),
+    ];
+
+    final priceLine = _buildPriceLine();
+    final sanitizedTags = [
+      for (final tag in tags)
+        if (tag.trim().isNotEmpty) tag.trim(),
+    ];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 20),
@@ -4438,30 +4551,65 @@ class _WhiskeyCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (imageUrl != null && imageUrl!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        imageUrl!,
+                        width: 96,
+                        height: 120,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, _, __) => Container(
+                          width: 96,
+                          height: 120,
+                          color: AppColors.neutralLight,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.local_bar,
+                            color: AppColors.leatherDark,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         whiskeyName,
-                        style: const TextStyle(
-                          fontSize: 18,
+                        style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: AppColors.darkGreen,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        style,
+                        _buildCategoryLabel(),
                         style: descriptionStyle,
                       ),
+                      if ((brand ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('Brand - ${brand!.trim()}',
+                            style: descriptionStyle),
+                      ],
+                      if ((distilleryName ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('Distillery - ${distilleryName!.trim()}',
+                            style: descriptionStyle),
+                      ],
                     ],
                   ),
                 ),
                 if (membership != null)
-                  Chip(
-                    label: Text(membership!),
-                    backgroundColor: AppColors.neutralLight,
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Chip(
+                      label: Text(membership!),
+                      backgroundColor: AppColors.neutralLight,
+                    ),
                   ),
                 if (onDelete != null)
                   IconButton(
@@ -4474,17 +4622,48 @@ class _WhiskeyCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Region - $region', style: descriptionStyle),
-            const SizedBox(height: 8),
-            if (notes.isNotEmpty)
+            if (originParts.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(originParts.join(' - '), style: descriptionStyle),
+            ],
+            if (shortDescription.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
               Text(
-                notes,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyLarge
-                    ?.copyWith(color: AppColors.darkGreen),
+                shortDescription.trim(),
+                style:
+                    textTheme.bodyLarge?.copyWith(color: AppColors.darkGreen),
               ),
+            ],
+            if (pillWidgets.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: pillWidgets,
+              ),
+            ],
+            if (priceLine != null) ...[
+              const SizedBox(height: 12),
+              Text(priceLine, style: descriptionStyle),
+            ],
+            if (sanitizedTags.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final tag in sanitizedTags)
+                    Chip(
+                      label: Text(tag),
+                      backgroundColor: AppColors.neutralLight,
+                    ),
+                ],
+              ),
+            ],
+            if (isHighlighted) ...[
+              const SizedBox(height: 12),
+              _buildStatusChip('Highlighted'),
+            ],
             if (showAuthor) ...[
               const SizedBox(height: 12),
               Text(
@@ -4497,125 +4676,1006 @@ class _WhiskeyCard extends StatelessWidget {
       ),
     );
   }
+
+  String _buildCategoryLabel() {
+    final buffer = StringBuffer(categoryLabel.trim());
+    if ((subCategory ?? '').trim().isNotEmpty) {
+      buffer.write(' - ');
+      buffer.write(subCategory!.trim());
+    }
+    return buffer.toString();
+  }
+
+  String? _buildPriceLine() {
+    final parts = <String>[];
+    if (msrp != null) {
+      parts.add('MSRP ${_formatCurrency(msrp!)}');
+    }
+    if (priceLow != null && priceHigh != null) {
+      parts.add(
+          'Typical ${_formatCurrency(priceLow!)} to ${_formatCurrency(priceHigh!)}');
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' | ');
+  }
+
+  String _formatCurrency(double value) {
+    final decimals = value == value.roundToDouble() ? 0 : 2;
+    return '\$${value.toStringAsFixed(decimals)}';
+  }
+
+  Widget _buildPill(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.neutralLight,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: AppColors.leatherDark),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String label) {
+    return Chip(
+      label: Text(label),
+      avatar: const Icon(
+        Icons.star_rounded,
+        size: 16,
+        color: AppColors.darkGreen,
+      ),
+      backgroundColor: AppColors.neutralLight,
+      shape: StadiumBorder(
+        side: BorderSide(color: AppColors.darkGreen.withOpacity(0.3)),
+      ),
+    );
+  }
 }
 
-class _AddWhiskeySheet extends StatefulWidget {
+_WhiskeyCard _buildWhiskeyCardFromData(
+  Map<String, dynamic> data, {
+  required String authorLabel,
+  required DateTime timestamp,
+  String? membership,
+  bool showAuthor = true,
+  VoidCallback? onDelete,
+}) {
+  final tags = ((data['tags'] as List?)
+          ?.whereType<String>()
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList() ??
+      const <String>[]);
+  return _WhiskeyCard(
+    whiskeyName: data['name'] as String? ?? 'Untitled Bottle',
+    categoryLabel: data['category'] as String? ??
+        data['style'] as String? ??
+        'Special Release',
+    region: data['region'] as String? ?? 'Unknown region',
+    shortDescription:
+        (data['shortDescription'] as String? ?? data['notes'] as String? ?? '')
+            .trim(),
+    authorLabel: authorLabel,
+    timestamp: timestamp,
+    membership: membership,
+    showAuthor: showAuthor,
+    onDelete: onDelete,
+    brand: data['brand'] as String?,
+    distilleryName: data['distilleryName'] as String?,
+    country: data['country'] as String?,
+    subCategory: data['subCategory'] as String?,
+    ageStatement: data['ageStatement'] as String?,
+    abv: (data['abv'] as num?)?.toDouble(),
+    proof: (data['proof'] as num?)?.toDouble(),
+    releaseType: data['releaseType'] as String?,
+    vintageOrBatch: data['vintageOrBatch'] as String?,
+    yearReleased: (data['yearReleased'] as num?)?.toInt(),
+    msrp: (data['msrp'] as num?)?.toDouble(),
+    priceLow: (data['priceLow'] as num?)?.toDouble(),
+    priceHigh: (data['priceHigh'] as num?)?.toDouble(),
+    rarityLevel: data['rarityLevel'] as String?,
+    availabilityStatus: data['availabilityStatus'] as String?,
+    tags: tags,
+    isHighlighted: data['isHighlighted'] as bool? ?? false,
+    imageUrl: data['imageUrl'] as String?,
+  );
+}
+
+class _AddWhiskeySheet extends StatelessWidget {
   const _AddWhiskeySheet();
 
   @override
-  State<_AddWhiskeySheet> createState() => _AddWhiskeySheetState();
+  Widget build(BuildContext context) {
+    return const _WhiskeyForm.addSheet();
+  }
 }
 
-class _AddWhiskeySheetState extends State<_AddWhiskeySheet> {
+enum _WhiskeyFormMode { add, edit }
+
+enum _WhiskeyFormLayout { sheet, dialog }
+
+class _WhiskeyForm extends StatefulWidget {
+  const _WhiskeyForm.addSheet({super.key})
+      : mode = _WhiskeyFormMode.add,
+        layout = _WhiskeyFormLayout.sheet,
+        whiskeyId = null,
+        initialData = const <String, dynamic>{};
+
+  const _WhiskeyForm.editDialog({
+    super.key,
+    required this.whiskeyId,
+    required this.initialData,
+  })  : mode = _WhiskeyFormMode.edit,
+        layout = _WhiskeyFormLayout.dialog;
+
+  final _WhiskeyFormMode mode;
+  final _WhiskeyFormLayout layout;
+  final String? whiskeyId;
+  final Map<String, dynamic> initialData;
+
+  @override
+  State<_WhiskeyForm> createState() => _WhiskeyFormState();
+}
+
+class _WhiskeyFormState extends State<_WhiskeyForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _brandController = TextEditingController();
   final _regionController = TextEditingController();
-  final _notesController = TextEditingController();
-  String _style = whiskeyStyles.first;
+  final _ageController = TextEditingController(text: 'NAS');
+  final _abvController = TextEditingController();
+  final _proofController = TextEditingController();
+  final _vintageController = TextEditingController();
+  final _yearController = TextEditingController();
+  final _msrpController = TextEditingController();
+  final _priceLowController = TextEditingController();
+  final _priceHighController = TextEditingController();
+  final _shortDescriptionController = TextEditingController();
+  final _tagsController = TextEditingController();
+  final PostUploader _uploader = PostUploader();
+
+  late final Future<List<_DistilleryOption>> _distilleryFuture;
+
+  String _selectedCategory = whiskeyCategories.first;
+  String _selectedSubCategory = whiskeySubCategories.first;
+  String _releaseType = whiskeyReleaseTypes.first;
+  String _rarityLevel = whiskeyRarityLevels.first;
+  String _availabilityStatus = whiskeyAvailabilityStatuses.first;
+  String _countryCode = countryOptions.first.code;
+  String? _selectedDistilleryId;
+  String? _selectedDistilleryName;
   bool _isSaving = false;
+  bool _isUploadingImage = false;
+  bool _isDeleting = false;
+  bool _isHighlighted = false;
+  String? _imageUrl;
+  @override
+  void initState() {
+    super.initState();
+    _distilleryFuture = _loadDistilleries();
+    _abvController.addListener(_handleAbvChanged);
+    _applyInitialData();
+  }
 
   @override
   void dispose() {
+    _abvController.removeListener(_handleAbvChanged);
     _nameController.dispose();
+    _brandController.dispose();
     _regionController.dispose();
-    _notesController.dispose();
+    _ageController.dispose();
+    _abvController.dispose();
+    _proofController.dispose();
+    _vintageController.dispose();
+    _yearController.dispose();
+    _msrpController.dispose();
+    _priceLowController.dispose();
+    _priceHighController.dispose();
+    _shortDescriptionController.dispose();
+    _tagsController.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
+  void _handleAbvChanged() {
+    final parsed = double.tryParse(_abvController.text.trim());
+    if (parsed == null) {
+      _proofController.text = '';
+      return;
+    }
+    _proofController.text = (parsed * 2).toStringAsFixed(1);
+  }
+
+  Future<List<_DistilleryOption>> _loadDistilleries() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('distilleries')
+        .orderBy('name')
+        .limit(100)
+        .get();
+    return snapshot.docs
+        .map((doc) => _DistilleryOption(
+              id: doc.id,
+              name: (doc.data()['name'] as String? ?? 'Untitled Distillery')
+                  .trim(),
+            ))
+        .toList();
+  }
+
+  Future<void> _handleImageUpload() async {
+    setState(() {
+      _isUploadingImage = true;
+    });
     try {
-      await WhiskeyService().addWhiskey(
-        name: _nameController.text,
-        region: _regionController.text,
-        notes: _notesController.text,
-        style: _style,
-      );
-      if (mounted) {
-        Navigator.of(context).pop(true);
+      final url =
+          await _uploader.pickAndUploadImage(destinationFolder: 'whiskeys');
+      if (!mounted) return;
+      if (url != null) {
+        setState(() {
+          _imageUrl = url;
+        });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not add whiskey: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not upload image: $e')),
+      );
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() {
+          _isUploadingImage = false;
+        });
+      }
     }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _imageUrl = null;
+    });
+  }
+
+  Future<void> _confirmDelete() async {
+    if (widget.mode != _WhiskeyFormMode.edit || widget.whiskeyId == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Delete whiskey?'),
+            content: const Text('This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.leatherDark,
+                ),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    await _deleteWhiskey();
+  }
+
+  Future<void> _deleteWhiskey() async {
+    if (_isDeleting || widget.whiskeyId == null) return;
+    setState(() => _isDeleting = true);
+    try {
+      await WhiskeyService().deleteWhiskey(widget.whiskeyId!);
+      if (!mounted) return;
+      Navigator.of(context).pop(_WhiskeyDialogOutcome.deleted);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete whiskey: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isDeleting = false);
+      }
+    }
+  }
+
+  void _applyInitialData() {
+    final data = widget.initialData;
+    if (data.isEmpty) return;
+
+    _nameController.text = (data['name'] as String? ?? '').trim();
+    _brandController.text = (data['brand'] as String? ?? '').trim();
+    _regionController.text = (data['region'] as String? ?? '').trim();
+    final age = (data['ageStatement'] as String? ?? 'NAS').trim();
+    _ageController.text = age.isEmpty ? 'NAS' : age;
+    _abvController.text = _formatNumber(data['abv'] as num?);
+    _proofController.text = _formatNumber(data['proof'] as num?);
+    _vintageController.text =
+        (data['vintageOrBatch'] as String? ?? '').trim();
+    final yearReleased = (data['yearReleased'] as num?)?.toInt();
+    _yearController.text = yearReleased?.toString() ?? '';
+    _msrpController.text = _formatNumber(data['msrp'] as num?);
+    _priceLowController.text = _formatNumber(data['priceLow'] as num?);
+    _priceHighController.text = _formatNumber(data['priceHigh'] as num?);
+    _shortDescriptionController.text =
+        (data['shortDescription'] as String? ??
+                data['notes'] as String? ??
+                '')
+            .trim();
+    final tags = (data['tags'] as List?)?.whereType<String>().toList() ?? [];
+    _tagsController.text = tags.join(', ');
+    _selectedCategory =
+        _coerceOption(whiskeyCategories, data['category'] as String?);
+    _selectedSubCategory =
+        _coerceOption(whiskeySubCategories, data['subCategory'] as String?);
+    _releaseType =
+        _coerceOption(whiskeyReleaseTypes, data['releaseType'] as String?);
+    _rarityLevel =
+        _coerceOption(whiskeyRarityLevels, data['rarityLevel'] as String?);
+    _availabilityStatus = _coerceOption(
+        whiskeyAvailabilityStatuses, data['availabilityStatus'] as String?);
+    _countryCode = _determineCountryCode(data);
+    _selectedDistilleryId = data['distilleryId'] as String?;
+    final rawDistilleryName = (data['distilleryName'] as String? ?? '').trim();
+    _selectedDistilleryName = rawDistilleryName.isEmpty ? null : rawDistilleryName;
+    _isHighlighted = data['isHighlighted'] as bool? ?? false;
+    _imageUrl = data['imageUrl'] as String?;
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final abv = double.parse(_abvController.text.trim());
+    final msrp = double.parse(_msrpController.text.trim());
+    final priceLow = double.parse(_priceLowController.text.trim());
+    final priceHigh = double.parse(_priceHighController.text.trim());
+    final yearReleased = _yearController.text.trim().isEmpty
+        ? null
+        : int.tryParse(_yearController.text.trim());
+    final tags = _tagsController.text
+        .split(',')
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
+
+    setState(() {
+      _isSaving = true;
+    });
+    try {
+      final service = WhiskeyService();
+      final name = _nameController.text.trim();
+      final brand = _brandController.text.trim();
+      final distilleryId = _selectedDistilleryId;
+      final distilleryName = _selectedDistilleryName;
+      final country = _resolveCountryName(_countryCode);
+      final countryCode = _countryCode;
+      final region = _regionController.text.trim();
+      final category = _selectedCategory;
+      final subCategory = _selectedSubCategory;
+      final ageStatement = _ageController.text.trim();
+      final proof = double.tryParse(_proofController.text.trim());
+      final releaseType = _releaseType;
+      final vintageOrBatch =
+          _vintageController.text.trim().isEmpty
+              ? null
+              : _vintageController.text.trim();
+      final shortDescription = _shortDescriptionController.text.trim();
+      final imageUrl = _imageUrl;
+
+      if (widget.mode == _WhiskeyFormMode.add) {
+        await service.addWhiskey(
+          name: name,
+          brand: brand,
+          distilleryId: distilleryId,
+          distilleryName: distilleryName,
+          country: country,
+          countryCode: countryCode,
+          region: region,
+          category: category,
+          subCategory: subCategory,
+          ageStatement: ageStatement,
+          abv: abv,
+          proof: proof,
+          releaseType: releaseType,
+          vintageOrBatch: vintageOrBatch,
+          yearReleased: yearReleased,
+          msrp: msrp,
+          priceLow: priceLow,
+          priceHigh: priceHigh,
+          rarityLevel: _rarityLevel,
+          availabilityStatus: _availabilityStatus,
+          shortDescription: shortDescription,
+          tags: tags,
+          isHighlighted: _isHighlighted,
+          imageUrl: imageUrl,
+        );
+      } else {
+        await service.updateWhiskey(
+          widget.whiskeyId!,
+          name: name,
+          brand: brand,
+          distilleryId: distilleryId,
+          distilleryName: distilleryName,
+          country: country,
+          countryCode: countryCode,
+          region: region,
+          category: category,
+          subCategory: subCategory,
+          ageStatement: ageStatement,
+          abv: abv,
+          proof: proof,
+          releaseType: releaseType,
+          vintageOrBatch: vintageOrBatch,
+          yearReleased: yearReleased,
+          msrp: msrp,
+          priceLow: priceLow,
+          priceHigh: priceHigh,
+          rarityLevel: _rarityLevel,
+          availabilityStatus: _availabilityStatus,
+          shortDescription: shortDescription,
+          tags: tags,
+          isHighlighted: _isHighlighted,
+          imageUrl: imageUrl,
+        );
+      }
+      if (!mounted) return;
+      final result = widget.mode == _WhiskeyFormMode.add
+          ? true
+          : _WhiskeyDialogOutcome.updated;
+      Navigator.of(context).pop(result);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save whiskey: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  void _cancel() {
+    if (_isSaving || _isDeleting) return;
+    final result = widget.mode == _WhiskeyFormMode.edit ? null : false;
+    Navigator.of(context).pop(result);
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.mode == _WhiskeyFormMode.add
+        ? 'Create a Whiskey Profile'
+        : 'Edit Whiskey';
+    final submitLabel = widget.mode == _WhiskeyFormMode.add
+        ? 'Save Whiskey'
+        : 'Update Whiskey';
+    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    final padding = widget.layout == _WhiskeyFormLayout.sheet
+        ? EdgeInsets.only(
+            bottom: viewInsets,
+            left: 24,
+            right: 24,
+            top: 24,
+          )
+        : EdgeInsets.fromLTRB(24, 24, 24, 24 + viewInsets);
+
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
+      padding: padding,
       child: Form(
         key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: AppColors.darkGreen),
+                    ),
+                  ),
+                  if (widget.mode == _WhiskeyFormMode.edit)
+                    IconButton(
+                      tooltip: 'Delete whiskey',
+                      onPressed: (_isSaving || _isDeleting)
+                          ? null
+                          : _confirmDelete,
+                      icon: _isDeleting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(
+                              Icons.delete_outline,
+                              color: AppColors.leatherDark,
+                            ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildImagePicker(),
+              const SizedBox(height: 16),
+              _FormSectionCard(
+                title: 'Bottle Basics',
+                children: [
+                  TextFormField(
+                    controller: _nameController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration:
+                        const InputDecoration(labelText: 'Whiskey Name'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: _brandController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Brand'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  _buildDistilleryDropdown(),
+                  _buildTwoColumnRow(
+                    _buildCountryDropdown(),
+                    TextFormField(
+                      controller: _regionController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Region'),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                              ? 'Required'
+                              : null,
+                    ),
+                  ),
+                  _buildTwoColumnRow(
+                    _buildDropdown(
+                      label: 'Category',
+                      value: _selectedCategory,
+                      items: whiskeyCategories,
+                      onChanged: (value) => setState(
+                          () => _selectedCategory = value ?? _selectedCategory),
+                    ),
+                    _buildDropdown(
+                      label: 'Sub-category',
+                      value: _selectedSubCategory,
+                      items: whiskeySubCategories,
+                      onChanged: (value) => setState(() =>
+                          _selectedSubCategory = value ?? _selectedSubCategory),
+                    ),
+                  ),
+                  TextFormField(
+                    controller: _ageController,
+                    decoration: const InputDecoration(
+                        labelText: 'Age Statement or NAS'),
+                  ),
+                ],
+              ),
+              _FormSectionCard(
+                title: 'Production Details',
+                children: [
+                  _buildTwoColumnRow(
+                    _buildNumberField(
+                      label: 'ABV %',
+                      controller: _abvController,
+                    ),
+                    TextFormField(
+                      controller: _proofController,
+                      readOnly: true,
+                      decoration:
+                          const InputDecoration(labelText: 'Proof (auto)'),
+                    ),
+                  ),
+                  _buildDropdown(
+                    label: 'Release Type',
+                    value: _releaseType,
+                    items: whiskeyReleaseTypes,
+                    onChanged: (value) =>
+                        setState(() => _releaseType = value ?? _releaseType),
+                  ),
+                  _buildTwoColumnRow(
+                    TextFormField(
+                      controller: _vintageController,
+                      decoration: const InputDecoration(
+                          labelText: 'Vintage or Batch (optional)'),
+                    ),
+                    TextFormField(
+                      controller: _yearController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'Year Released (optional)'),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              _FormSectionCard(
+                title: 'Market Data',
+                children: [
+                  _buildNumberField(
+                    label: 'MSRP',
+                    controller: _msrpController,
+                  ),
+                  _buildTwoColumnRow(
+                    _buildNumberField(
+                      label: 'Typical Low',
+                      controller: _priceLowController,
+                    ),
+                    _buildNumberField(
+                      label: 'Typical High',
+                      controller: _priceHighController,
+                    ),
+                  ),
+                ],
+              ),
+              _FormSectionCard(
+                title: 'Positioning',
+                children: [
+                  _buildTwoColumnRow(
+                    _buildDropdown(
+                      label: 'Rarity Level',
+                      value: _rarityLevel,
+                      items: whiskeyRarityLevels,
+                      onChanged: (value) =>
+                          setState(() => _rarityLevel = value ?? _rarityLevel),
+                    ),
+                    _buildDropdown(
+                      label: 'Availability',
+                      value: _availabilityStatus,
+                      items: whiskeyAvailabilityStatuses,
+                      onChanged: (value) => setState(() =>
+                          _availabilityStatus = value ?? _availabilityStatus),
+                    ),
+                  ),
+                  TextFormField(
+                    controller: _shortDescriptionController,
+                    maxLines: 3,
+                    maxLength: 150,
+                    decoration:
+                        const InputDecoration(labelText: 'Short Description'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: _tagsController,
+                    decoration: const InputDecoration(
+                        labelText: 'Tags',
+                        helperText: 'Separate tags with commas'),
+                  ),
+                ],
+              ),
+              _FormSectionCard(
+                title: 'Highlighting',
+                children: [
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _isHighlighted,
+                    onChanged: (value) => setState(() => _isHighlighted = value),
+                    title: const Text('Highlighted'),
+                    subtitle: const Text(
+                      'Toggle on to mark this whiskey as highlighted.',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : _cancel,
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _isSaving ? null : _submit,
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(submitLabel),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePicker() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Bottle Image',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                TextButton(
+                  onPressed: _imageUrl == null || _isUploadingImage
+                      ? null
+                      : _removeImage,
+                  child: const Text('Remove'),
+                ),
+              ],
+            ),
+            if (_imageUrl != null) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  _imageUrl!,
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, _, __) => Container(
+                    height: 160,
+                    color: AppColors.neutralLight,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isUploadingImage ? null : _handleImageUpload,
+              icon: _isUploadingImage
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.photo_library_outlined),
+              label: Text(_imageUrl == null ? 'Upload image' : 'Replace image'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDistilleryDropdown() {
+    return FutureBuilder<List<_DistilleryOption>>(
+      future: _distilleryFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Text(
+            'We could not load your distilleries right now.',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.error),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const LinearProgressIndicator();
+        }
+        final options = snapshot.data ?? const <_DistilleryOption>[];
+        return DropdownButtonFormField<String?>(
+          value: _selectedDistilleryId,
+          decoration: const InputDecoration(labelText: 'Distillery (optional)'),
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('Independent / No distillery'),
+            ),
+            for (final option in options)
+              DropdownMenuItem<String?>(
+                value: option.id,
+                child: Text(option.name),
+              ),
+          ],
+          onChanged: (value) {
+            setState(() {
+              _selectedDistilleryId = value;
+              if (value == null) {
+                _selectedDistilleryName = null;
+              } else {
+                final match = options.where((opt) => opt.id == value).toList();
+                _selectedDistilleryName =
+                    match.isEmpty ? null : match.first.name;
+              }
+            });
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCountryDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _countryCode,
+      decoration: const InputDecoration(labelText: 'Country'),
+      isExpanded: true,
+      items: [
+        for (final option in countryOptions)
+          DropdownMenuItem<String>(
+            value: option.code,
+            child: Text(option.name),
+          ),
+      ],
+      onChanged: (value) {
+        if (value == null) return;
+        setState(() {
+          _countryCode = value;
+        });
+      },
+    );
+  }
+
+  Widget _buildDropdown({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: InputDecoration(labelText: label),
+      items: [
+        for (final item in items)
+          DropdownMenuItem<String>(
+            value: item,
+            child: Text(item),
+          ),
+      ],
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildNumberField({
+    required String label,
+    required TextEditingController controller,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+      ],
+      decoration: InputDecoration(labelText: label),
+      validator: _requireNumber,
+    );
+  }
+
+  Widget _buildTwoColumnRow(Widget first, Widget second) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520) {
+          return Column(
+            children: [
+              first,
+              const SizedBox(height: 12),
+              second,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: first),
+            const SizedBox(width: 12),
+            Expanded(child: second),
+          ],
+        );
+      },
+    );
+  }
+
+  String _coerceOption(List<String> options, String? value) {
+    if (value != null && options.contains(value)) {
+      return value;
+    }
+    return options.first;
+  }
+
+  String _determineCountryCode(Map<String, dynamic> data) {
+    final incomingCode = data['countryCode'] as String?;
+    if (incomingCode != null &&
+        countryOptions.any((option) => option.code == incomingCode)) {
+      return incomingCode;
+    }
+    final incomingName = (data['country'] as String? ?? '').toLowerCase();
+    final match = countryOptions.firstWhere(
+      (option) => option.name.toLowerCase() == incomingName,
+      orElse: () => countryOptions.first,
+    );
+    return match.code;
+  }
+
+  String _formatNumber(num? value) {
+    if (value == null) return '';
+    final doubleValue = value.toDouble();
+    if (doubleValue == doubleValue.roundToDouble()) {
+      return doubleValue.toStringAsFixed(0);
+    }
+    return doubleValue.toString();
+  }
+
+  String _resolveCountryName(String code) {
+    return countryOptions
+        .firstWhere(
+          (option) => option.code == code,
+          orElse: () => countryOptions.first,
+        )
+        .name;
+  }
+
+  String? _requireNumber(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Required';
+    }
+    return double.tryParse(value.trim()) == null ? 'Enter a number' : null;
+  }
+}
+
+class _DistilleryOption {
+  const _DistilleryOption({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
+class _FormSectionCard extends StatelessWidget {
+  const _FormSectionCard({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add a Whiskey',
+              title,
               style: Theme.of(context)
                   .textTheme
-                  .titleLarge
-                  ?.copyWith(color: AppColors.darkGreen),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameController,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Whiskey Name'),
-              validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'Required' : null,
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _style,
-              decoration: const InputDecoration(labelText: 'Style'),
-              items: [
-                for (final style in whiskeyStyles)
-                  DropdownMenuItem(
-                    value: style,
-                    child: Text(style),
-                  ),
-              ],
-              onChanged: (value) => setState(() => _style = value ?? _style),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _regionController,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                  labelText: 'Region / Distillery (optional)'),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _notesController,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Tasting Notes'),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _isSaving ? null : _save,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save to Library'),
-              ),
-            ),
-            const SizedBox(height: 24),
+            for (var i = 0; i < children.length; i++) ...[
+              children[i],
+              if (i != children.length - 1) const SizedBox(height: 12),
+            ],
           ],
         ),
       ),
@@ -4623,7 +5683,6 @@ class _AddWhiskeySheetState extends State<_AddWhiskeySheet> {
   }
 }
 
-// ignore: unused_element
 class _UserDistilleryList extends StatelessWidget {
   const _UserDistilleryList({required this.userId});
 
@@ -5782,8 +6841,22 @@ class _FeedMessage extends StatelessWidget {
 }
 
 /// OTHER PAGES LEFT UNCHANGED FOR BREVITY
-class ContentPage extends StatelessWidget {
+class ContentPage extends StatefulWidget {
   const ContentPage({super.key});
+
+  @override
+  State<ContentPage> createState() => _ContentPageState();
+}
+
+class _ContentPageState extends State<ContentPage> {
+  static const List<String> _positioningOptions = [
+    'Everyday',
+    'Limited',
+    'Annual',
+    'Ultra-Rare',
+  ];
+
+  String _selectedPositioning = _positioningOptions.first;
 
   void _openDatabaseSheet(BuildContext context) {
     showModalBottomSheet(
@@ -5791,6 +6864,11 @@ class ContentPage extends StatelessWidget {
       isScrollControlled: true,
       builder: (_) => const _LibraryDatabaseSheet(),
     );
+  }
+
+  void _handlePositioningChanged(String? value) {
+    if (value == null || value == _selectedPositioning) return;
+    setState(() => _selectedPositioning = value);
   }
 
   @override
@@ -5801,37 +6879,106 @@ class ContentPage extends StatelessWidget {
       shrinkWrap: true,
       padding: const EdgeInsets.all(16),
       children: [
+        Center(
+          child: GestureDetector(
+            onTap: () => _openDatabaseSheet(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.darkGreen, width: 2),
+                color: AppColors.neutralLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.darkGreen.withOpacity(0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.local_library_rounded,
+                      color: AppColors.darkGreen),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Whiskey Manuscript Database',
+                    style: textTheme.titleMedium
+                        ?.copyWith(color: AppColors.darkGreen),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MerchandisePage()),
+            ),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.darkGreen, width: 2),
+                color: AppColors.neutralLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.darkGreen.withOpacity(0.1),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.shopping_bag_rounded,
+                      color: AppColors.darkGreen),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Visit Merchandise',
+                    style: textTheme.titleMedium
+                        ?.copyWith(color: AppColors.darkGreen),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
         Row(
           children: [
             Expanded(
               child: Text(
-                'Whiskey Manuscript Database',
+                'Featured Whiskeys',
                 style:
                     textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
               ),
             ),
-            TextButton.icon(
-              onPressed: () => _openDatabaseSheet(context),
-              icon: const Icon(Icons.table_rows_rounded),
-              label: const Text('Browse All'),
+            const SizedBox(width: 12),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedPositioning,
+                borderRadius: BorderRadius.circular(12),
+                items: [
+                  for (final option in _positioningOptions)
+                    DropdownMenuItem(
+                      value: option,
+                      child: Text(option),
+                    ),
+                ],
+                onChanged: _handlePositioningChanged,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        TextButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const MerchandisePage()),
-          ),
-          icon: const Icon(Icons.shopping_bag_rounded),
-          label: const Text('Visit Merchandise'),
-        ),
-        const SizedBox(height: 32),
-        Text(
-          'Featured Whiskeys',
-          style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
-        ),
-        const SizedBox(height: 12),
-        const _GlobalWhiskeyFeed(),
+        _GlobalWhiskeyFeed(positioning: _selectedPositioning),
         const SizedBox(height: 32),
         Text(
           'Favorite Distilleries',
@@ -6192,9 +7339,6 @@ class WhiskeyDatabasePage extends StatefulWidget {
 class _WhiskeyDatabasePageState extends State<WhiskeyDatabasePage> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
-  String _membershipFilter = 'All';
-
-  List<String> get _membershipFilters => ['All', ...membershipLevels];
 
   @override
   void initState() {
@@ -6239,26 +7383,10 @@ class _WhiskeyDatabasePageState extends State<WhiskeyDatabasePage> {
               ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final filter in _membershipFilters)
-                  ChoiceChip(
-                    label: Text(filter),
-                    selected: _membershipFilter == filter,
-                    onSelected: (selected) {
-                      if (!selected) return;
-                      setState(() => _membershipFilter = filter);
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
             Expanded(
               child: _DatabaseWhiskeyList(
                 query: _query,
-                membership: _membershipFilter,
+                membership: 'All',
               ),
             ),
           ],
@@ -6383,7 +7511,7 @@ class _DatabaseLinkButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              '•',
+              'â€¢',
               style: TextStyle(
                 color: AppColors.darkGreen,
                 fontSize: 14,
@@ -6406,8 +7534,12 @@ class _DatabaseWhiskeyList extends StatelessWidget {
 
   bool _matches(Map<String, dynamic> data) {
     final q = query.toLowerCase();
+    final description =
+        (data['shortDescription'] as String? ?? data['notes'] as String? ?? '')
+            .toLowerCase();
+    final tagBlob = (data['tags'] as List?)?.join(' ') ?? '';
     final target =
-        '${data['name'] ?? ''} ${data['style'] ?? ''} ${data['region'] ?? ''} ${data['userName'] ?? ''}'
+        '${data['name'] ?? ''} ${data['brand'] ?? ''} ${data['category'] ?? data['style'] ?? ''} ${data['subCategory'] ?? ''} ${data['region'] ?? ''} ${data['userName'] ?? ''} $description $tagBlob'
             .toLowerCase();
     final membershipLevel =
         (data['membershipLevel'] as String? ?? '').toLowerCase();
@@ -6426,16 +7558,381 @@ class _DatabaseWhiskeyList extends StatelessWidget {
     return _DatabaseStream(
       stream: stream,
       emptyMessage: 'No whiskeys match your filters yet.',
-      itemBuilder: (doc) => _WhiskeyCard(
-        whiskeyName: doc['name'] as String? ?? 'Untitled Bottle',
-        style: doc['style'] as String? ?? 'Special Release',
-        region: doc['region'] as String? ?? 'Unknown region',
-        notes: (doc['notes'] as String? ?? '').trim(),
-        authorLabel: doc['userName'] as String? ?? 'Explorer',
-        membership: doc['membershipLevel'] as String?,
-        timestamp: _coerceTimestamp(doc['createdAt']),
-      ),
+      itemBuilder: (context, doc) {
+        final data = doc.data();
+        return _DatabaseWhiskeyCard(
+          name: (data['name'] as String? ?? 'Untitled Bottle').trim(),
+          brand: (data['brand'] as String? ?? '').trim(),
+          category: (data['category'] as String? ??
+                  data['style'] as String? ??
+                  'Special Release')
+              .trim(),
+          subCategory: (data['subCategory'] as String? ?? '').trim(),
+          imageUrl: data['imageUrl'] as String?,
+          onTap: () => _openEditDialog(context, doc),
+        );
+      },
       filter: _matches,
+    );
+  }
+
+  Future<void> _openEditDialog(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) async {
+    final result = await showDialog<_WhiskeyDialogOutcome>(
+      context: context,
+      builder: (_) => _EditWhiskeyDialog(
+        whiskeyId: doc.id,
+        data: doc.data(),
+      ),
+    );
+    if (!context.mounted || result == null) return;
+    final message = result == _WhiskeyDialogOutcome.deleted
+        ? 'Whiskey deleted.'
+        : 'Whiskey updated.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _FeaturedWhiskeyCard extends StatelessWidget {
+  const _FeaturedWhiskeyCard({required this.data});
+
+  final _FeaturedWhiskeyData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 170,
+      height: 260,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.neutralMid),
+        color: AppColors.lightNeutral,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 2,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _buildImage()),
+                  if (data.actions.isNotEmpty)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: PopupMenuButton<_ShowcaseAction>(
+                          tooltip: 'Save',
+                          icon: const Icon(
+                            Icons.more_horiz_rounded,
+                            color: Colors.white,
+                          ),
+                          color: Colors.white,
+                          onSelected: (action) => action.onSelected(context),
+                          itemBuilder: (context) => [
+                            for (final action in data.actions)
+                              PopupMenuItem<_ShowcaseAction>(
+                                value: action,
+                                child: Row(
+                                  children: [
+                                    if (action.icon != null) ...[
+                                      Icon(action.icon,
+                                          size: 18, color: AppColors.leatherDark),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    Text(action.label),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: AppColors.lightNeutral,
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(19)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    data.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.darkGreen,
+                      height: 1.1,
+                    ),
+                  ),
+                  if (data.brand.trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      data.brand,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.leatherDark,
+                        fontSize: 13,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 2),
+                  Text(
+                    data.categoryLine,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.leatherDark,
+                      fontSize: 12,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    if (data.imageUrl == null || data.imageUrl!.isEmpty) {
+      return Container(
+        color: AppColors.neutralLight,
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.local_bar_rounded,
+          color: AppColors.leatherDark,
+          size: 40,
+        ),
+      );
+    }
+    return Image.network(
+      data.imageUrl!,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        color: AppColors.neutralLight,
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.broken_image_outlined,
+          color: AppColors.leatherDark,
+        ),
+      ),
+    );
+  }
+}
+
+class _FeaturedWhiskeyData {
+  const _FeaturedWhiskeyData({
+    required this.title,
+    required this.brand,
+    required this.category,
+    required this.subCategory,
+    this.imageUrl,
+    this.actions = const [],
+  });
+
+  final String title;
+  final String brand;
+  final String category;
+  final String subCategory;
+  final String? imageUrl;
+  final List<_ShowcaseAction> actions;
+
+  String get categoryLine =>
+      subCategory.trim().isEmpty ? category : '$category - $subCategory';
+}
+
+class _DatabaseWhiskeyCard extends StatelessWidget {
+  const _DatabaseWhiskeyCard({
+    required this.name,
+    required this.brand,
+    required this.category,
+    required this.subCategory,
+    required this.imageUrl,
+    required this.onTap,
+  });
+
+  final String name;
+  final String brand;
+  final String category;
+  final String subCategory;
+  final String? imageUrl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final categoryLine = subCategory.isNotEmpty
+        ? '$category Â· $subCategory'
+        : category;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.neutralLight.withOpacity(0.6)),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _DatabaseWhiskeyThumbnail(imageUrl: imageUrl, label: name),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        style: textTheme.titleMedium
+                            ?.copyWith(color: AppColors.darkGreen),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (brand.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          brand,
+                          style: textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.leatherDark),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (categoryLine.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          categoryLine,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.leatherDark,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DatabaseWhiskeyThumbnail extends StatelessWidget {
+  const _DatabaseWhiskeyThumbnail({required this.imageUrl, required this.label});
+
+  final String? imageUrl;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Container(
+      width: 48,
+      height: 60,
+      decoration: BoxDecoration(
+        color: AppColors.neutralLight,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label.isNotEmpty ? label.substring(0, 1).toUpperCase() : '?',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: AppColors.darkGreen,
+        ),
+      ),
+    );
+
+    if (imageUrl == null || imageUrl!.isEmpty) {
+      return placeholder;
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        imageUrl!,
+        width: 48,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => placeholder,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return SizedBox(
+            width: 48,
+            height: 60,
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: progress.expectedTotalBytes != null
+                      ? progress.cumulativeBytesLoaded /
+                          progress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+enum _WhiskeyDialogOutcome { updated, deleted }
+
+class _EditWhiskeyDialog extends StatelessWidget {
+  const _EditWhiskeyDialog({required this.whiskeyId, required this.data});
+
+  final String whiskeyId;
+  final Map<String, dynamic> data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: _WhiskeyForm.editDialog(
+          whiskeyId: whiskeyId,
+          initialData: data,
+        ),
+      ),
     );
   }
 }
@@ -6469,15 +7966,19 @@ class _DatabaseDistilleryList extends StatelessWidget {
     return _DatabaseStream(
       stream: stream,
       emptyMessage: 'No distilleries match your filters yet.',
-      itemBuilder: (doc) => _DistilleryCard(
-        name: doc['name'] as String? ?? 'Untitled Distillery',
-        location: doc['location'] as String? ?? 'Unknown location',
-        story: doc['story'] as String? ?? '',
-        signaturePour: doc['signaturePour'] as String? ?? 'House pour unknown',
-        authorLabel: doc['userName'] as String? ?? 'Explorer',
-        membership: doc['membershipLevel'] as String?,
-        timestamp: _coerceTimestamp(doc['createdAt']),
-      ),
+      itemBuilder: (context, doc) {
+        final data = doc.data();
+        return _DistilleryCard(
+          name: data['name'] as String? ?? 'Untitled Distillery',
+          location: data['location'] as String? ?? 'Unknown location',
+          story: data['story'] as String? ?? '',
+          signaturePour:
+              data['signaturePour'] as String? ?? 'House pour unknown',
+          authorLabel: data['userName'] as String? ?? 'Explorer',
+          membership: data['membershipLevel'] as String?,
+          timestamp: _coerceTimestamp(data['createdAt']),
+        );
+      },
       filter: _matches,
     );
   }
@@ -6731,15 +8232,18 @@ class _DatabaseArticleList extends StatelessWidget {
     return _DatabaseStream(
       stream: stream,
       emptyMessage: 'No articles match your filters yet.',
-      itemBuilder: (doc) => _ArticleCard(
-        title: doc['title'] as String? ?? 'Untitled Article',
-        summary: doc['summary'] as String? ?? '',
-        link: doc['link'] as String? ?? '',
-        category: doc['category'] as String? ?? 'Story',
-        authorLabel: doc['userName'] as String? ?? 'Contributor',
-        membership: doc['membershipLevel'] as String?,
-        timestamp: _coerceTimestamp(doc['createdAt']),
-      ),
+      itemBuilder: (context, doc) {
+        final data = doc.data();
+        return _ArticleCard(
+          title: data['title'] as String? ?? 'Untitled Article',
+          summary: data['summary'] as String? ?? '',
+          link: data['link'] as String? ?? '',
+          category: data['category'] as String? ?? 'Story',
+          authorLabel: data['userName'] as String? ?? 'Contributor',
+          membership: data['membershipLevel'] as String?,
+          timestamp: _coerceTimestamp(data['createdAt']),
+        );
+      },
       filter: _matches,
     );
   }
@@ -6754,7 +8258,10 @@ class _DatabaseStream extends StatelessWidget {
   });
 
   final Stream<QuerySnapshot<Map<String, dynamic>>> stream;
-  final Widget Function(Map<String, dynamic> data) itemBuilder;
+  final Widget Function(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) itemBuilder;
   final String emptyMessage;
   final bool Function(Map<String, dynamic>) filter;
 
@@ -6783,7 +8290,7 @@ class _DatabaseStream extends StatelessWidget {
           shrinkWrap: true,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            for (final doc in filtered) itemBuilder(doc.data()),
+            for (final doc in filtered) itemBuilder(context, doc),
           ],
         );
       },
@@ -6792,7 +8299,9 @@ class _DatabaseStream extends StatelessWidget {
 }
 
 class _GlobalWhiskeyFeed extends StatelessWidget {
-  const _GlobalWhiskeyFeed();
+  const _GlobalWhiskeyFeed({required this.positioning});
+
+  final String positioning;
 
   Future<void> _handleWhiskeySave(
     BuildContext context,
@@ -6863,13 +8372,23 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
           );
         }
 
-        final items = [
-          for (final doc in docs)
-            _ShowcaseData(
-              title: doc.data()['name'] as String? ?? 'Untitled Bottle',
-              subtitle: doc.data()['style'] as String? ?? 'Release',
-              footer: doc.data()['region'] as String? ?? 'Unknown region',
-              badge: doc.data()['membershipLevel'] as String?,
+        final items = <_FeaturedWhiskeyData>[];
+        for (final doc in docs) {
+          final data = doc.data();
+          final isHighlighted = data['isHighlighted'] as bool? ?? false;
+          final rarity = (data['rarityLevel'] as String? ?? '').trim();
+          if (!isHighlighted) continue;
+          if (rarity.toLowerCase() != positioning.toLowerCase()) continue;
+          items.add(
+            _FeaturedWhiskeyData(
+              title: data['name'] as String? ?? 'Untitled Bottle',
+              brand: (data['brand'] as String? ?? '').trim(),
+              category: (data['category'] as String? ??
+                      data['style'] as String? ??
+                      'Special Release')
+                  .trim(),
+              subCategory: (data['subCategory'] as String? ?? '').trim(),
+              imageUrl: data['imageUrl'] as String?,
               actions: [
                 _ShowcaseAction(
                   label: 'Add to collection',
@@ -6885,9 +8404,27 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
                 ),
               ],
             ),
-        ];
+          );
+        }
 
-        return _HorizontalShowcase(items: items);
+        if (items.isEmpty) {
+          return const _FeedMessage(
+            message:
+                'No highlighted whiskeys match this positioning yet. Check back soon!',
+          );
+        }
+
+        return SizedBox(
+          height: 280,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) =>
+                _FeaturedWhiskeyCard(data: items[index]),
+          ),
+        );
       },
     );
   }
@@ -7900,7 +9437,8 @@ class ProfilePage extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 'The Whiskey Manuscript Databases',
-                style: textTheme.titleMedium?.copyWith(color: AppColors.leatherDark),
+                style: textTheme.titleMedium
+                    ?.copyWith(color: AppColors.leatherDark),
               ),
               const SizedBox(height: 8),
               Column(
@@ -7989,21 +9527,3 @@ class _PageLayout extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
