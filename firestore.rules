@@ -152,9 +152,23 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.auth.uid == request.resource.data.userId
         && request.resource.data.keys().hasOnly([
-          'userId','userName','userEmail','membershipLevel','name','location','story','signaturePour','createdAt'])
+          'userId','userName','userEmail','membershipLevel','name','type','country','region','stateOrProvince','city',
+          'isVisitAble','primaryStyles','shortDescription','websiteUrl','imageUrl','tags','location','story',
+          'signaturePour','createdAt'])
         && request.resource.data.name is string && request.resource.data.name.size() > 0
-        && request.resource.data.location is string && request.resource.data.story is string
+        && request.resource.data.type is string && request.resource.data.type.size() > 0
+        && request.resource.data.country is string && request.resource.data.country.size() > 0
+        && request.resource.data.region is string && request.resource.data.region.size() > 0
+        && request.resource.data.stateOrProvince is string
+        && request.resource.data.city is string
+        && request.resource.data.isVisitAble is bool
+        && request.resource.data.primaryStyles is list
+        && request.resource.data.shortDescription is string
+        && (request.resource.data.websiteUrl == null || request.resource.data.websiteUrl is string)
+        && (request.resource.data.imageUrl == null || request.resource.data.imageUrl is string)
+        && request.resource.data.tags is list
+        && request.resource.data.location is string
+        && request.resource.data.story is string
         && request.resource.data.signaturePour is string
         && request.resource.data.createdAt == request.time;
       allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
@@ -165,10 +179,16 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.auth.uid == request.resource.data.userId
         && request.resource.data.keys().hasOnly([
-          'userId','userName','userEmail','membershipLevel','title','summary','link','category','createdAt'])
+          'userId','userName','userEmail','membershipLevel','title','subtitle','category',
+          'tags','markdownFilename','markdownPath','imageFilename','imagePath','createdAt'])
         && request.resource.data.title is string && request.resource.data.title.size() > 0
-        && request.resource.data.summary is string && request.resource.data.link is string
-        && request.resource.data.category is string
+        && request.resource.data.category is string && request.resource.data.category.size() > 0
+        && request.resource.data.tags is list
+        && request.resource.data.markdownFilename is string && request.resource.data.markdownFilename.size() > 0
+        && request.resource.data.markdownPath is string && request.resource.data.markdownPath.size() > 0
+        && (!request.resource.data.keys().hasAny(['subtitle']) || request.resource.data.subtitle is string)
+        && (!request.resource.data.keys().hasAny(['imageFilename']) || request.resource.data.imageFilename is string)
+        && (!request.resource.data.keys().hasAny(['imagePath']) || request.resource.data.imagePath is string)
         && request.resource.data.createdAt == request.time;
       allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
     }

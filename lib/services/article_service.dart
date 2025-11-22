@@ -11,9 +11,11 @@ class ArticleService {
 
   Future<void> addArticle({
     required String title,
-    required String summary,
-    required String link,
+    String? subtitle,
     required String category,
+    required String markdownFilename,
+    required List<String> tags,
+    String? imageFilename,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -21,6 +23,11 @@ class ArticleService {
     }
 
     final membership = await _userMembershipLevel(user.uid);
+    final sanitizedMarkdown = markdownFilename.trim();
+    final normalizedTags =
+        tags.map((tag) => tag.trim()).where((tag) => tag.isNotEmpty).toList();
+    final sanitizedImage = imageFilename?.trim();
+    final sanitizedSubtitle = subtitle?.trim();
 
     await _firestore.collection('articles').add({
       'userId': user.uid,
@@ -28,9 +35,16 @@ class ArticleService {
       'userEmail': user.email,
       'membershipLevel': membership,
       'title': title.trim(),
-      'summary': summary.trim(),
-      'link': link.trim(),
+      if (sanitizedSubtitle != null && sanitizedSubtitle.isNotEmpty)
+        'subtitle': sanitizedSubtitle,
       'category': category.trim(),
+      'tags': normalizedTags,
+      'markdownFilename': sanitizedMarkdown,
+      'markdownPath': 'assets/articles/$sanitizedMarkdown',
+      if (sanitizedImage != null && sanitizedImage.isNotEmpty) ...{
+        'imageFilename': sanitizedImage,
+        'imagePath': 'assets/images/articles/$sanitizedImage',
+      },
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
