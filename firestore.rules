@@ -180,7 +180,7 @@ service cloud.firestore {
         && request.auth.uid == request.resource.data.userId
         && request.resource.data.keys().hasOnly([
           'userId','userName','userEmail','membershipLevel','title','subtitle','category',
-          'tags','markdownFilename','markdownPath','imageFilename','imagePath','createdAt'])
+          'tags','markdownFilename','markdownPath','imageFilename','imagePath','iconUrl','createdAt'])
         && request.resource.data.title is string && request.resource.data.title.size() > 0
         && request.resource.data.category is string && request.resource.data.category.size() > 0
         && request.resource.data.tags is list
@@ -189,23 +189,51 @@ service cloud.firestore {
         && (!request.resource.data.keys().hasAny(['subtitle']) || request.resource.data.subtitle is string)
         && (!request.resource.data.keys().hasAny(['imageFilename']) || request.resource.data.imageFilename is string)
         && (!request.resource.data.keys().hasAny(['imagePath']) || request.resource.data.imagePath is string)
+        && (!request.resource.data.keys().hasAny(['iconUrl']) || request.resource.data.iconUrl is string)
         && request.resource.data.createdAt == request.time;
       allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    function _hasValidMerchPrice(price) {
+      return price is map
+        && price.base is number
+        && (price.compareAt == null || price.compareAt is number)
+        && price.currency is string && price.currency.size() > 0
+        && (price.taxCategory == null || price.taxCategory is string);
+    }
+
+    function _hasValidMerchData(data) {
+      return data.userId is string && data.userId.size() > 0
+        && data.title is string && data.title.size() > 0
+        && data.category is string && data.category.size() > 0
+        && _hasValidMerchPrice(data.price)
+        && data.variants is list && data.variants.size() > 0
+        && (data.description == null || data.description is string)
+        && (data.subtitle == null || data.subtitle is string)
+        && (data.brand == null || data.brand is string)
+        && (data.thumbnailUrl == null || data.thumbnailUrl is string)
+        && (data.purchaseLink == null || data.purchaseLink is string)
+        && (data.link == null || data.link is string)
+        && (data.images == null || data.images is list)
+        && (data.tags == null || data.tags is list)
+        && (data.membershipExclusiveTier == null || data.membershipExclusiveTier is string)
+        && (data.membershipDiscounts == null || data.membershipDiscounts is map)
+        && data.isActive is bool;
     }
 
     match /merch/{itemId} {
       allow read: if true;
       allow create: if isSignedIn()
         && request.auth.uid == request.resource.data.userId
-        && request.resource.data.keys().hasOnly([
-          'userId','userName','userEmail','membershipLevel','title','description','price','link','category','createdAt'])
-        && request.resource.data.title is string && request.resource.data.title.size() > 0
-        && request.resource.data.description is string
-        && request.resource.data.price is number
-        && request.resource.data.link is string
-        && request.resource.data.category is string
-        && request.resource.data.createdAt == request.time;
-      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+        && _hasValidMerchData(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isSignedIn()
+        && request.auth.uid == resource.data.userId
+        && _hasValidMerchData(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
     }
 
     match /events/{eventId} {

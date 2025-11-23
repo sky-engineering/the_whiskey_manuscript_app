@@ -9,36 +9,62 @@ class MerchandiseService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
-  Future<void> addItem({
-    required String title,
-    required String description,
-    required double price,
-    required String link,
-    required String category,
-  }) async {
+  Future<void> saveItem(Map<String, dynamic> payload) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw StateError('No authenticated user.');
     }
 
-    await _firestore.collection('merch').add({
-      'userId': user.uid,
-      'userName': user.displayName ?? user.email ?? 'Curator',
-      'userEmail': user.email,
-      'membershipLevel': await _userMembershipLevel(user.uid),
-      'title': title.trim(),
-      'description': description.trim(),
-      'price': price,
-      'link': link.trim(),
-      'category': category.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    final collection = _firestore.collection('merch');
+    final timestamp = FieldValue.serverTimestamp();
+    final membershipLevel = await _userMembershipLevel(user.uid);
+    final rawId = (payload['id'] as String?)?.trim();
+
+    if (rawId == null || rawId.isEmpty) {
+      final docRef = collection.doc();
+      await docRef.set({
+        ...payload,
+        'id': docRef.id,
+        'userId': user.uid,
+        'userName': user.displayName ?? user.email ?? 'Curator',
+        'userEmail': user.email,
+        'membershipLevel': membershipLevel,
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      });
+      return;
+    }
+
+    final docRef = collection.doc(rawId);
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) {
+      throw StateError('Merchandise item not found.');
+    }
+
+    final ownerId = snapshot.data()?['userId'] as String?;
+    if (ownerId != user.uid) {
+      throw Exception('You can only edit your own merchandise.');
+    }
+
+    await docRef.set(
+      {
+        ...payload,
+        'id': rawId,
+        'userId': user.uid,
+        'userName': user.displayName ?? user.email ?? 'Curator',
+        'userEmail': user.email,
+        'membershipLevel': membershipLevel,
+        'updatedAt': timestamp,
+      },
+      SetOptions(merge: true),
+    );
   }
 
   Future<String?> _userMembershipLevel(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
     return doc.data()?['membershipLevel'] as String?;
   }
+
   Future<void> deleteItem(String itemId) async {
     final user = _auth.currentUser;
     if (user == null) {

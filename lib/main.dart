@@ -135,13 +135,34 @@ const List<String> articleCategories = [
 ];
 
 const List<String> merchCategories = [
-  'Apparel',
-  'Glassware',
-  'Books',
-  'Art',
-  'Membership',
-  'Other',
+  'apparel',
+  'glassware',
+  'accessories',
+  'limited_release',
+  'art',
+  'books',
+  'experiences',
+  'other',
 ];
+
+const List<String> merchandiseMembershipTiers = [
+  'neat',
+  'cask',
+  'manuscript',
+];
+
+String _titleize(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) return normalized;
+  return normalized
+      .split(RegExp(r'[_\s]+'))
+      .where((segment) => segment.isNotEmpty)
+      .map(
+        (segment) => segment[0].toUpperCase() +
+            (segment.length > 1 ? segment.substring(1).toLowerCase() : ''),
+      )
+      .join(' ');
+}
 
 class CountryOption {
   final String code;
@@ -5199,7 +5220,7 @@ class _WhiskeyFormState extends State<_WhiskeyForm> {
         ? 'Create a Whiskey Profile'
         : 'Edit Whiskey';
     final submitLabel =
-        widget.mode == _WhiskeyFormMode.add ? 'Save Whiskey' : 'Update Whiskey';
+        widget.mode == _WhiskeyFormMode.add ? 'Add' : 'Update';
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final padding = widget.layout == _WhiskeyFormLayout.sheet
         ? EdgeInsets.only(
@@ -6333,11 +6354,9 @@ class _ProducerPlaceFormState extends State<_ProducerPlaceForm> {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(
-                              widget.mode == _ProducerPlaceFormMode.add
-                                  ? 'Save Producer or Place'
-                                  : 'Update Producer or Place',
-                            ),
+                          : Text(widget.mode == _ProducerPlaceFormMode.add
+                              ? 'Add'
+                              : 'Update'),
                     ),
                   ),
                 ],
@@ -6866,7 +6885,10 @@ class _AddArticleSheetState extends State<_AddArticleSheet> {
   final _tagsController = TextEditingController();
   final _markdownController = TextEditingController();
   final _imageController = TextEditingController();
+  final PostUploader _iconUploader = PostUploader();
   String _category = articleCategories.first;
+  String? _iconUrl;
+  bool _isUploadingIcon = false;
   bool _isSaving = false;
 
   @override
@@ -6903,6 +6925,7 @@ class _AddArticleSheetState extends State<_AddArticleSheet> {
         markdownFilename: markdownFilename,
         tags: tags,
         imageFilename: imageFilename.isEmpty ? null : imageFilename,
+        iconUrl: _iconUrl,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -6925,6 +6948,32 @@ class _AddArticleSheetState extends State<_AddArticleSheet> {
       sanitized = sanitized.substring(1);
     }
     return sanitized;
+  }
+
+  Future<void> _uploadIcon() async {
+    setState(() => _isUploadingIcon = true);
+    try {
+      final url = await _iconUploader.pickAndUploadImage(
+        destinationFolder: 'articles/icons',
+        processingOptions:
+            const ImageProcessingOptions(maxDimension: 900, jpegQuality: 80),
+      );
+      if (!mounted) return;
+      if (url != null) {
+        setState(() => _iconUrl = url);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not upload icon: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingIcon = false);
+    }
+  }
+
+  void _removeIcon() {
+    setState(() => _iconUrl = null);
   }
 
   @override
@@ -6988,6 +7037,20 @@ class _AddArticleSheetState extends State<_AddArticleSheet> {
                             if (value == null) return;
                             setState(() => _category = value);
                           },
+                  ),
+                ],
+              ),
+              _FormSectionCard(
+                title: 'Presentation',
+                children: [
+                  _ArticleIconField(
+                    iconUrl: _iconUrl,
+                    isUploading: _isUploadingIcon,
+                    onUpload:
+                        (_isSaving || _isUploadingIcon) ? null : _uploadIcon,
+                    onRemove: _isSaving || _isUploadingIcon || _iconUrl == null
+                        ? null
+                        : _removeIcon,
                   ),
                 ],
               ),
@@ -7088,21 +7151,23 @@ class _UserMerchList extends StatelessWidget {
         return Column(
           children: [
             for (final doc in docs)
-              _MerchCard(
-                title: doc.data()['title'] as String? ?? 'Untitled Item',
-                description: doc.data()['description'] as String? ?? '',
-                price: (doc.data()['price'] as num? ?? 0).toDouble(),
-                link: doc.data()['link'] as String? ?? '',
-                category: doc.data()['category'] as String? ?? 'Lifestyle',
-                authorLabel: 'You',
-                membership: doc.data()['membershipLevel'] as String?,
-                timestamp: _coerceTimestamp(doc.data()['createdAt']),
-                showAuthor: false,
-                onDelete: () => _deleteMerch(
-                  context,
-                  doc.id,
-                  doc.data()['title'] as String?,
-                ),
+              Builder(
+                builder: (context) {
+                  final data = Map<String, dynamic>.from(doc.data());
+                  data.putIfAbsent('id', () => doc.id);
+                  return _MerchCard.fromData(
+                    data: data,
+                    authorLabel: 'You',
+                    timestamp: _coerceTimestamp(data['createdAt']),
+                    showAuthor: false,
+                    onDelete: () => _deleteMerch(
+                      context,
+                      doc.id,
+                      data['title'] as String?,
+                    ),
+                    onTap: () => _editMerch(context, data, doc.id),
+                  );
+                },
               ),
           ],
         );
@@ -7129,50 +7194,172 @@ class _UserMerchList extends StatelessWidget {
       successMessage: 'Item removed.',
     );
   }
+
+  Future<void> _editMerch(
+    BuildContext context,
+    Map<String, dynamic> data,
+    String docId,
+  ) async {
+    final payload = {
+      ...data,
+      'id': _stringOrNull(data['id']) ?? docId,
+    };
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _AddMerchSheet(initialData: payload),
+    );
+    if (updated == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Merchandise item updated.')),
+      );
+    }
+  }
 }
+
 
 class _MerchCard extends StatelessWidget {
   const _MerchCard({
     required this.title,
-    required this.description,
-    required this.price,
-    required this.link,
     required this.category,
+    required this.price,
+    required this.priceCurrency,
     required this.authorLabel,
     required this.timestamp,
-    this.membership,
+    required this.isActive,
+    this.subtitle,
+    this.description,
+    this.brand,
+    this.compareAtPrice,
+    this.purchaseLink,
+    this.membershipExclusiveTier,
+    this.membershipDiscounts,
+    this.tags = const [],
+    this.variants = const [],
+    this.thumbnailUrl,
     this.showAuthor = true,
     this.onDelete,
+    this.onTap,
   });
 
+  factory _MerchCard.fromData({
+    required Map<String, dynamic> data,
+    required String authorLabel,
+    required DateTime timestamp,
+    bool showAuthor = true,
+    VoidCallback? onDelete,
+    VoidCallback? onTap,
+  }) {
+    final priceField = data['price'];
+    final priceMap =
+        priceField is Map<String, dynamic> ? priceField : <String, dynamic>{};
+    final priceValue = (priceField is num)
+        ? priceField.toDouble()
+        : (priceMap['base'] as num? ?? 0).toDouble();
+    final compareAtValue = (priceMap['compareAt'] as num?)?.toDouble();
+    final currencyValue = priceField is Map<String, dynamic>
+        ? (priceMap['currency'] as String? ?? 'USD').toUpperCase()
+        : 'USD';
+    final variants = _variantListFromDynamic(data['variants']);
+    final membershipDiscounts =
+        _doubleMapFromDynamic(data['membershipDiscounts']);
+    final purchaseLinkRaw = data.containsKey('purchaseLink')
+        ? data['purchaseLink']
+        : data['link'];
+    return _MerchCard(
+      title: _stringOrNull(data['title']) ?? 'Untitled Item',
+      category: _stringOrNull(data['category']) ?? 'other',
+      price: priceValue,
+      priceCurrency: currencyValue,
+      authorLabel: authorLabel,
+      timestamp: timestamp,
+      isActive: data['isActive'] as bool? ?? true,
+      subtitle: _stringOrNull(data['subtitle']),
+      description: _stringOrNull(data['description']),
+      brand: _stringOrNull(data['brand']),
+      compareAtPrice: compareAtValue,
+      purchaseLink: _stringOrNull(purchaseLinkRaw),
+      membershipExclusiveTier:
+          _stringOrNull(data['membershipExclusiveTier']),
+      membershipDiscounts:
+          membershipDiscounts.isEmpty ? null : membershipDiscounts,
+      tags: _stringListFromDynamic(data['tags']),
+      variants: variants,
+      thumbnailUrl: _stringOrNull(data['thumbnailUrl']),
+      showAuthor: showAuthor,
+      onDelete: onDelete,
+      onTap: onTap,
+    );
+  }
+
   final String title;
-  final String description;
-  final double price;
-  final String link;
   final String category;
+  final double price;
+  final String priceCurrency;
   final String authorLabel;
   final DateTime timestamp;
-  final String? membership;
+  final bool isActive;
+  final String? subtitle;
+  final String? description;
+  final String? brand;
+  final double? compareAtPrice;
+  final String? purchaseLink;
+  final String? membershipExclusiveTier;
+  final Map<String, double>? membershipDiscounts;
+  final List<String> tags;
+  final List<Map<String, dynamic>> variants;
+  final String? thumbnailUrl;
   final bool showAuthor;
   final VoidCallback? onDelete;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final descriptionStyle = Theme.of(context)
-        .textTheme
-        .bodyMedium
-        ?.copyWith(color: AppColors.leatherDark);
+    final theme = Theme.of(context);
+    final descriptionStyle =
+        theme.textTheme.bodyMedium?.copyWith(color: AppColors.leatherDark);
+    final priceLine = _buildPriceLine();
+    final chips = <Widget>[];
+    if (!isActive) {
+      chips.add(const Chip(label: Text('Inactive')));
+    }
+    if (membershipExclusiveTier != null &&
+        membershipExclusiveTier!.trim().isNotEmpty) {
+      chips.add(
+        Chip(
+          label: Text(_titleize(membershipExclusiveTier!)),
+          backgroundColor: AppColors.neutralLight,
+        ),
+      );
+    }
 
+    final borderRadius = BorderRadius.circular(12);
     return Card(
       margin: const EdgeInsets.only(bottom: 20),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      shape: RoundedRectangleBorder(borderRadius: borderRadius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: borderRadius,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (thumbnailUrl != null && thumbnailUrl!.trim().isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      thumbnailUrl!,
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                if (thumbnailUrl != null && thumbnailUrl!.trim().isNotEmpty)
+                  const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -7185,19 +7372,33 @@ class _MerchCard extends StatelessWidget {
                           color: AppColors.darkGreen,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$category  -  \$${price.toStringAsFixed(2)}',
-                        style: descriptionStyle,
+                      if (subtitle != null && subtitle!.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            subtitle!,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '$priceLine | ${_titleize(category)}${brand != null && brand!.trim().isNotEmpty ? ' - ${brand!.trim()}' : ''}',
+                          style: descriptionStyle,
+                        ),
                       ),
+                      if (chips.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: chips,
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                if (membership != null)
-                  Chip(
-                    label: Text(membership!),
-                    backgroundColor: AppColors.neutralLight,
-                  ),
                 if (onDelete != null)
                   IconButton(
                     onPressed: onDelete,
@@ -7209,40 +7410,212 @@ class _MerchCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (description.isNotEmpty)
-              Text(
-                description,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyLarge
-                    ?.copyWith(color: AppColors.darkGreen),
-              ),
-            const SizedBox(height: 8),
-            if (link.isNotEmpty)
-              Text(
-                link,
-                style: const TextStyle(
-                  color: AppColors.leather,
-                  decoration: TextDecoration.underline,
+            if (description != null && description!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  description!,
+                  style: theme.textTheme.bodyLarge
+                      ?.copyWith(color: AppColors.darkGreen),
                 ),
               ),
-            if (showAuthor) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Shared by $authorLabel on ${timestamp.month}/${timestamp.day}/${timestamp.year}',
-                style: descriptionStyle,
+            if (membershipDiscounts != null &&
+                membershipDiscounts!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final entry in membershipDiscounts!.entries)
+                      Chip(
+                        label: Text(
+                            '${_titleize(entry.key)} ${(entry.value * 100).toStringAsFixed(0)}% off'),
+                      ),
+                  ],
+                ),
               ),
-            ],
+            if (variants.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Variants (${variants.length})',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(color: AppColors.darkGreen),
+                    ),
+                    const SizedBox(height: 4),
+                    for (final variant in variants.take(3))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _VariantSummaryRow(variant: variant),
+                      ),
+                  ],
+                ),
+              ),
+            if (tags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final tag in tags)
+                      Chip(
+                        label: Text(tag),
+                        backgroundColor: AppColors.neutralLight,
+                      ),
+                  ],
+                ),
+              ),
+            if (purchaseLink != null && purchaseLink!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  purchaseLink!,
+                  style: const TextStyle(
+                    color: AppColors.leather,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            if (showAuthor)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'Shared by $authorLabel on ${timestamp.month}/${timestamp.day}/${timestamp.year}',
+                  style: descriptionStyle,
+                ),
+              ),
           ],
+        ),
         ),
       ),
     );
   }
+
+  String _buildPriceLine() {
+    final buffer = StringBuffer()
+      ..write(priceCurrency.toUpperCase())
+      ..write(' ')
+      ..write(price.toStringAsFixed(2));
+    if (compareAtPrice != null) {
+      buffer
+        ..write(' (')
+        ..write(compareAtPrice!.toStringAsFixed(2))
+        ..write(')');
+    }
+    return buffer.toString();
+  }
 }
 
+class _VariantSummaryRow extends StatelessWidget {
+  const _VariantSummaryRow({required this.variant});
+
+  final Map<String, dynamic> variant;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (variant['name'] as String?)?.trim();
+    final variantId = variant['variantId'] as String?;
+    final color = (variant['color'] as String?)?.trim();
+    final size = (variant['size'] as String?)?.trim();
+    final inventory = variant['inventory'] as Map<String, dynamic>?;
+    final qty = inventory != null
+        ? (inventory['quantityAvailable'] as num? ?? 0).toInt()
+        : 0;
+    final chips = <String>[];
+    if (color != null && color.isNotEmpty) chips.add(color);
+    if (size != null && size.isNotEmpty) chips.add(size);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            name?.isNotEmpty == true ? name! : (variantId ?? 'Variant'),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: AppColors.darkGreen),
+          ),
+        ),
+        if (chips.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(
+              chips.join(' | '),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.leatherDark),
+            ),
+          ),
+        Text(
+          'Qty $qty',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: AppColors.leatherDark),
+        ),
+      ],
+    );
+  }
+}
+
+List<String> _stringListFromDynamic(dynamic value) {
+  if (value is Iterable) {
+    return value
+        .map((element) => element is String ? element : element?.toString())
+        .whereType<String>()
+        .map((element) => element.trim())
+        .where((element) => element.isNotEmpty)
+        .toList();
+  }
+  return <String>[];
+}
+
+Map<String, double> _doubleMapFromDynamic(dynamic value) {
+  if (value is Map) {
+    final result = <String, double>{};
+    value.forEach((key, dynamic raw) {
+      final mapKey = key?.toString();
+      if (mapKey == null) return;
+      if (raw is num) {
+        result[mapKey] = raw.toDouble();
+      } else if (raw is String) {
+        final parsed = double.tryParse(raw);
+        if (parsed != null) result[mapKey] = parsed;
+      }
+    });
+    return result;
+  }
+  return <String, double>{};
+}
+
+List<Map<String, dynamic>> _variantListFromDynamic(dynamic value) {
+  if (value is Iterable) {
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+  }
+  return <Map<String, dynamic>>[];
+}
+
+String? _stringOrNull(dynamic value) {
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+  return null;
+}
+
+
 class _AddMerchSheet extends StatefulWidget {
-  const _AddMerchSheet();
+  const _AddMerchSheet({this.initialData});
+
+  final Map<String, dynamic>? initialData;
 
   @override
   State<_AddMerchSheet> createState() => _AddMerchSheetState();
@@ -7250,33 +7623,77 @@ class _AddMerchSheet extends StatefulWidget {
 
 class _AddMerchSheetState extends State<_AddMerchSheet> {
   final _formKey = GlobalKey<FormState>();
+  final _idController = TextEditingController();
   final _titleController = TextEditingController();
+  final _subtitleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _linkController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _brandController = TextEditingController();
+  final _thumbnailController = TextEditingController();
+  final _imagesController = TextEditingController();
+  final _tagsController = TextEditingController();
+  final _purchaseLinkController = TextEditingController();
+  final _priceBaseController = TextEditingController();
+  final _priceCompareAtController = TextEditingController();
+  final _priceCurrencyController = TextEditingController(text: 'USD');
+  final _priceTaxCategoryController = TextEditingController();
+  late final Map<String, TextEditingController> _membershipDiscountControllers;
+  late final List<_VariantFormData> _variants;
   String _category = merchCategories.first;
+  String? _membershipExclusiveTier;
+  bool _isActive = true;
   bool _isSaving = false;
+  bool get _isEditing => widget.initialData != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _membershipDiscountControllers = {
+      for (final tier in merchandiseMembershipTiers)
+        tier: TextEditingController(),
+    };
+    if (widget.initialData != null) {
+      _variants = _buildVariantForms(widget.initialData!);
+      _hydrateFromInitialData(widget.initialData!);
+    } else {
+      _variants = [_VariantFormData()];
+    }
+  }
 
   @override
   void dispose() {
+    _idController.dispose();
     _titleController.dispose();
+    _subtitleController.dispose();
     _descriptionController.dispose();
-    _linkController.dispose();
-    _priceController.dispose();
+    _brandController.dispose();
+    _thumbnailController.dispose();
+    _imagesController.dispose();
+    _tagsController.dispose();
+    _purchaseLinkController.dispose();
+    _priceBaseController.dispose();
+    _priceCompareAtController.dispose();
+    _priceCurrencyController.dispose();
+    _priceTaxCategoryController.dispose();
+    for (final controller in _membershipDiscountControllers.values) {
+      controller.dispose();
+    }
+    for (final variant in _variants) {
+      variant.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_variants.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one variant.')),
+      );
+      return;
+    }
     setState(() => _isSaving = true);
     try {
-      await MerchandiseService().addItem(
-        title: _titleController.text,
-        description: _descriptionController.text,
-        link: _linkController.text,
-        category: _category,
-        price: double.tryParse(_priceController.text) ?? 0,
-      );
+      await MerchandiseService().saveItem(_buildPayload());
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -7288,93 +7705,849 @@ class _AddMerchSheetState extends State<_AddMerchSheet> {
     }
   }
 
+  Map<String, dynamic> _buildPayload() {
+    final membershipDiscounts = <String, double>{};
+    _membershipDiscountControllers.forEach((tier, controller) {
+      final value = controller.text.trim();
+      if (value.isEmpty) return;
+      final parsed = double.tryParse(value);
+      if (parsed != null) membershipDiscounts[tier] = parsed;
+    });
+
+    final payload = <String, dynamic>{
+      'id': _effectiveItemId(),
+      'title': _titleController.text.trim(),
+      'subtitle': _nullable(_subtitleController.text),
+      'description': _nullable(_descriptionController.text),
+      'category': _category,
+      'brand': _nullable(_brandController.text),
+      'images': _splitListInput(_imagesController.text),
+      'thumbnailUrl': _nullable(_thumbnailController.text),
+      'isActive': _isActive,
+      'tags': _splitListInput(_tagsController.text),
+      'membershipExclusiveTier': _membershipExclusiveTier,
+      'membershipDiscounts':
+          membershipDiscounts.isEmpty ? null : membershipDiscounts,
+      'purchaseLink': _nullable(_purchaseLinkController.text),
+      'price': {
+        'base': double.parse(_priceBaseController.text.trim()),
+        'compareAt': _tryParseDouble(_priceCompareAtController.text),
+        'currency': _priceCurrencyController.text.trim().isEmpty
+            ? 'USD'
+            : _priceCurrencyController.text.trim().toUpperCase(),
+        'taxCategory': _nullable(_priceTaxCategoryController.text),
+      },
+      'variants': _variants.map(_variantToMap).toList(),
+    };
+    return payload;
+  }
+
+  String _effectiveItemId() {
+    final entered = _idController.text.trim();
+    if (entered.isNotEmpty) return entered;
+    final existing = widget.initialData != null
+        ? (_stringOrNull(widget.initialData!['id']) ?? '')
+        : '';
+    return existing;
+  }
+
+  void _hydrateFromInitialData(Map<String, dynamic> data) {
+    _setControllerText(_idController, _stringOrNull(data['id']));
+    _setControllerText(_titleController, _stringOrNull(data['title']));
+    _setControllerText(_subtitleController, _stringOrNull(data['subtitle']));
+    _setControllerText(_descriptionController, _stringOrNull(data['description']));
+    _setControllerText(_brandController, _stringOrNull(data['brand']));
+    _setControllerText(_thumbnailController, _stringOrNull(data['thumbnailUrl']));
+    _setControllerText(
+      _purchaseLinkController,
+      _stringOrNull(data['purchaseLink']) ?? _stringOrNull(data['link']),
+    );
+    final images = _stringListFromDynamic(data['images']);
+    if (images.isNotEmpty) _imagesController.text = images.join('\n');
+    final tags = _stringListFromDynamic(data['tags']);
+    if (tags.isNotEmpty) _tagsController.text = tags.join('\n');
+    final priceField = data['price'];
+    final priceMap =
+        priceField is Map<String, dynamic> ? priceField : <String, dynamic>{};
+    final basePrice = priceField is num
+        ? priceField.toDouble()
+        : (priceMap['base'] as num?)?.toDouble();
+    if (basePrice != null) {
+      _priceBaseController.text = basePrice.toString();
+    }
+    final compareAt = (priceMap['compareAt'] as num?)?.toDouble();
+    if (compareAt != null) {
+      _priceCompareAtController.text = compareAt.toString();
+    }
+    final currency = priceField is Map<String, dynamic>
+        ? _stringOrNull(priceMap['currency'])
+        : null;
+    final resolvedCurrency =
+        (currency != null && currency.isNotEmpty) ? currency : 'USD';
+    _priceCurrencyController.text = resolvedCurrency;
+    _setControllerText(
+      _priceTaxCategoryController,
+      _stringOrNull(priceMap['taxCategory']),
+    );
+    _category = _categoryFromData(_stringOrNull(data['category']));
+    _isActive = data['isActive'] as bool? ?? _isActive;
+    final tier = _stringOrNull(data['membershipExclusiveTier']);
+    _membershipExclusiveTier = tier?.toLowerCase();
+    final membershipDiscounts =
+        _doubleMapFromDynamic(data['membershipDiscounts']);
+    membershipDiscounts.forEach((tierKey, discount) {
+      final controller = _membershipDiscountControllers[tierKey];
+      if (controller != null) controller.text = discount.toString();
+    });
+  }
+
+  List<_VariantFormData> _buildVariantForms(Map<String, dynamic> data) {
+    final variants = _variantListFromDynamic(data['variants']);
+    if (variants.isEmpty) return [_VariantFormData()];
+    return variants.map(_VariantFormData.fromMap).toList();
+  }
+
+  String _categoryFromData(String? raw) {
+    if (raw == null) return merchCategories.first;
+    final normalized = raw.toLowerCase().replaceAll(' ', '_');
+    return merchCategories.contains(normalized) ? normalized : merchCategories.first;
+  }
+
+  void _setControllerText(TextEditingController controller, String? value) {
+    if (value == null) return;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return;
+    controller.text = trimmed;
+  }
+
+  Map<String, dynamic> _variantToMap(_VariantFormData data) {
+    return {
+      'variantId': data.variantIdController.text.trim(),
+      'name': data.nameController.text.trim(),
+      'size': _nullable(data.sizeController.text),
+      'color': _nullable(data.colorController.text),
+      'sku': _nullable(data.skuController.text),
+      'barcode': _nullable(data.barcodeController.text),
+      'priceOverride': _tryParseDouble(data.priceOverrideController.text),
+      'inventory': {
+        'quantityAvailable':
+            _tryParseInt(data.quantityController.text) ?? 0,
+        'isTracking': data.trackInventory,
+        'allowBackorder': data.allowBackorder,
+      },
+      'weightGrams': _tryParseInt(data.weightController.text),
+      'dimensions': _dimensionsFor(data),
+      'shippingProfileId': _nullable(data.shippingProfileController.text),
+      'isShippable': data.isShippable,
+      'isPhysicalProduct': data.isPhysicalProduct,
+      'maxPurchaseLimit': _tryParseInt(data.maxPurchaseLimitController.text),
+      'relatedProductIds':
+          _splitListInput(data.relatedProductsController.text),
+      'rating': {
+        'average': _tryParseDouble(data.ratingAverageController.text),
+        'count': _tryParseInt(data.ratingCountController.text) ?? 0,
+      },
+      'searchKeywords':
+          _splitListInput(data.searchKeywordsController.text),
+    };
+  }
+
+  Map<String, double>? _dimensionsFor(_VariantFormData data) {
+    final height = _tryParseDouble(data.heightController.text);
+    final width = _tryParseDouble(data.widthController.text);
+    final depth = _tryParseDouble(data.depthController.text);
+    if (height == null && width == null && depth == null) return null;
+    return {
+      if (height != null) 'height': height,
+      if (width != null) 'width': width,
+      if (depth != null) 'depth': depth,
+    };
+  }
+
+  List<String> _splitListInput(String value) {
+    return value
+        .split(RegExp(r'[\n,]'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+  }
+
+  double? _tryParseDouble(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return double.tryParse(trimmed);
+  }
+
+  int? _tryParseInt(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
+
+  String? _nullable(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 24,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isEditing ? 'Edit Merchandise' : 'Add Merchandise',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(color: AppColors.darkGreen),
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  context,
+                  'Basics',
+                  [
+                    TextFormField(
+                      controller: _idController,
+                      decoration: const InputDecoration(
+                        labelText: 'Merchandise ID',
+                        helperText: 'Leave blank to auto-generate',
+                      ),
+                    ),
+                    TextFormField(
+                      controller: _titleController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Title'),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                              ? 'Required'
+                              : null,
+                    ),
+                    TextFormField(
+                      controller: _subtitleController,
+                      decoration: const InputDecoration(labelText: 'Subtitle'),
+                    ),
+                    TextFormField(
+                      controller: _brandController,
+                      decoration: const InputDecoration(labelText: 'Brand'),
+                    ),
+                    DropdownButtonFormField<String>(
+                      value: _category,
+                      decoration: const InputDecoration(labelText: 'Category'),
+                      items: [
+                        for (final category in merchCategories)
+                          DropdownMenuItem(
+                            value: category,
+                            child: Text(_titleize(category)),
+                          )
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _category = value);
+                      },
+                    ),
+                    TextFormField(
+                      controller: _descriptionController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: 'Description'),
+                    ),
+                  ],
+                ),
+                _buildSection(
+                  context,
+                  'Media & Tags',
+                  [
+                    TextFormField(
+                      controller: _thumbnailController,
+                      decoration:
+                          const InputDecoration(labelText: 'Thumbnail URL'),
+                    ),
+                    TextFormField(
+                      controller: _imagesController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Image URLs',
+                        helperText: 'Comma or newline separated URLs',
+                      ),
+                    ),
+                    TextFormField(
+                      controller: _tagsController,
+                      minLines: 1,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Tags',
+                        helperText: 'Comma or newline separated tags',
+                      ),
+                    ),
+                    TextFormField(
+                      controller: _purchaseLinkController,
+                      decoration:
+                          const InputDecoration(labelText: 'Purchase Link'),
+                    ),
+                  ],
+                ),
+                _buildSection(
+                  context,
+                  'Status & Membership',
+                  [
+                    SwitchListTile.adaptive(
+                      value: _isActive,
+                      onChanged: (value) => setState(() => _isActive = value),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Active'),
+                      subtitle: const Text('Inactive items stay hidden'),
+                    ),
+                    DropdownButtonFormField<String?>(
+                      value: _membershipExclusiveTier,
+                      decoration: const InputDecoration(
+                        labelText: 'Membership Exclusive Tier',
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('None')),
+                        for (final tier in merchandiseMembershipTiers)
+                          DropdownMenuItem(
+                            value: tier,
+                            child: Text(_titleize(tier)),
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _membershipExclusiveTier = value),
+                    ),
+                    for (final tier in merchandiseMembershipTiers)
+                      TextFormField(
+                        controller: _membershipDiscountControllers[tier]!,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: '${_titleize(tier)} Discount',
+                          helperText: 'Decimal value (0.15 for 15%)',
+                        ),
+                      ),
+                  ],
+                ),
+                _buildSection(
+                  context,
+                  'Pricing',
+                  [
+                    TextFormField(
+                      controller: _priceBaseController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Base Price'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Required';
+                        }
+                        return double.tryParse(value.trim()) == null
+                            ? 'Enter a valid number'
+                            : null;
+                      },
+                    ),
+                    TextFormField(
+                      controller: _priceCompareAtController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Compare At Price'),
+                    ),
+                    TextFormField(
+                      controller: _priceCurrencyController,
+                      decoration: const InputDecoration(labelText: 'Currency'),
+                    ),
+                    TextFormField(
+                      controller: _priceTaxCategoryController,
+                      decoration:
+                          const InputDecoration(labelText: 'Tax Category'),
+                    ),
+                  ],
+                ),
+                _buildVariantsSection(context),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _isSaving ? null : () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _isSaving ? null : _save,
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(_isEditing ? 'Update' : 'Add'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
       ),
-      child: Form(
-        key: _formKey,
+    );
+  }
+
+  Widget _buildSection(
+    BuildContext context,
+    String title,
+    List<Widget> children,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add Merchandise',
+              title,
               style: Theme.of(context)
                   .textTheme
-                  .titleLarge
+                  .titleMedium
                   ?.copyWith(color: AppColors.darkGreen),
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _titleController,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Item Name'),
-              validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'Required' : null,
-            ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: [
-                for (final category in merchCategories)
-                  DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  ),
-              ],
-              onChanged: (value) =>
-                  setState(() => _category = value ?? _category),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _priceController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Price (USD)'),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) return 'Required';
-                return double.tryParse(value) == null
-                    ? 'Enter a valid number'
-                    : null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _linkController,
-              decoration: const InputDecoration(labelText: 'Purchase Link'),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _descriptionController,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _isSaving ? null : _save,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save Item'),
-              ),
-            ),
-            const SizedBox(height: 24),
+            ..._withSpacing(children),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _withSpacing(List<Widget> children) {
+    final spaced = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      spaced.add(children[i]);
+      if (i != children.length - 1) {
+        spaced.add(const SizedBox(height: 12));
+      }
+    }
+    return spaced;
+  }
+
+  Widget _buildVariantsSection(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Variants (${_variants.length})',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(color: AppColors.darkGreen),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() => _variants.add(_VariantFormData()));
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Variant'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < _variants.length; i++)
+              _buildVariantCard(context, i),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVariantCard(BuildContext context, int index) {
+    final variant = _variants[index];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: AppColors.neutralLight.withOpacity(0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Variant ${index + 1}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(color: AppColors.darkGreen),
+                ),
+                if (_variants.length > 1)
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        final removed = _variants.removeAt(index);
+                        removed.dispose();
+                      });
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Remove'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.variantIdController,
+              decoration: const InputDecoration(labelText: 'Variant ID'),
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.nameController,
+              decoration: const InputDecoration(labelText: 'Variant Name'),
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.sizeController,
+                    decoration: const InputDecoration(labelText: 'Size'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.colorController,
+                    decoration: const InputDecoration(labelText: 'Color'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.skuController,
+                    decoration: const InputDecoration(labelText: 'SKU'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.barcodeController,
+                    decoration: const InputDecoration(labelText: 'Barcode'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.priceOverrideController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  const InputDecoration(labelText: 'Price Override (optional)'),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.quantityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Quantity Available',
+              ),
+            ),
+            SwitchListTile.adaptive(
+              value: variant.trackInventory,
+              onChanged: (value) =>
+                  setState(() => variant.trackInventory = value),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Track Inventory'),
+            ),
+            SwitchListTile.adaptive(
+              value: variant.allowBackorder,
+              onChanged: (value) =>
+                  setState(() => variant.allowBackorder = value),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Allow Backorder'),
+            ),
+            SwitchListTile.adaptive(
+              value: variant.isShippable,
+              onChanged: (value) =>
+                  setState(() => variant.isShippable = value),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Is Shippable'),
+            ),
+            SwitchListTile.adaptive(
+              value: variant.isPhysicalProduct,
+              onChanged: (value) =>
+                  setState(() => variant.isPhysicalProduct = value),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Physical Product'),
+            ),
+            TextFormField(
+              controller: variant.weightController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Weight (grams)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.heightController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Height (cm)'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.widthController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Width (cm)'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.depthController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Depth (cm)'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.shippingProfileController,
+              decoration:
+                  const InputDecoration(labelText: 'Shipping Profile ID'),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.maxPurchaseLimitController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Max Purchase Limit',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.relatedProductsController,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Related Product IDs',
+                helperText: 'Comma or newline separated IDs',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.ratingAverageController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Rating Average',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: variant.ratingCountController,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Rating Count'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: variant.searchKeywordsController,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Search Keywords',
+                helperText: 'Comma or newline separated keywords',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VariantFormData {
+  _VariantFormData()
+      : variantIdController = TextEditingController(),
+        nameController = TextEditingController(),
+        sizeController = TextEditingController(),
+        colorController = TextEditingController(),
+        skuController = TextEditingController(),
+        barcodeController = TextEditingController(),
+        priceOverrideController = TextEditingController(),
+        quantityController = TextEditingController(text: '0'),
+        weightController = TextEditingController(),
+        heightController = TextEditingController(),
+        widthController = TextEditingController(),
+        depthController = TextEditingController(),
+        shippingProfileController = TextEditingController(),
+        maxPurchaseLimitController = TextEditingController(),
+        relatedProductsController = TextEditingController(),
+        ratingAverageController = TextEditingController(),
+        ratingCountController = TextEditingController(text: '0'),
+        searchKeywordsController = TextEditingController();
+
+  factory _VariantFormData.fromMap(Map<String, dynamic> data) {
+    final form = _VariantFormData();
+    form.variantIdController.text =
+        _stringOrNull(data['variantId']) ?? form.variantIdController.text;
+    form.nameController.text =
+        _stringOrNull(data['name']) ?? form.nameController.text;
+    form.sizeController.text =
+        _stringOrNull(data['size']) ?? form.sizeController.text;
+    form.colorController.text =
+        _stringOrNull(data['color']) ?? form.colorController.text;
+    form.skuController.text =
+        _stringOrNull(data['sku']) ?? form.skuController.text;
+    form.barcodeController.text =
+        _stringOrNull(data['barcode']) ?? form.barcodeController.text;
+    final priceOverride = (data['priceOverride'] as num?)?.toDouble();
+    if (priceOverride != null) {
+      form.priceOverrideController.text = priceOverride.toString();
+    }
+    final inventory =
+        data['inventory'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final qty = (inventory['quantityAvailable'] as num?)?.toInt();
+    if (qty != null) {
+      form.quantityController.text = qty.toString();
+    }
+    form.trackInventory = inventory['isTracking'] as bool? ?? form.trackInventory;
+    form.allowBackorder =
+        inventory['allowBackorder'] as bool? ?? form.allowBackorder;
+    form.isShippable = data['isShippable'] as bool? ?? form.isShippable;
+    form.isPhysicalProduct =
+        data['isPhysicalProduct'] as bool? ?? form.isPhysicalProduct;
+    final weight = (data['weightGrams'] as num?)?.toInt();
+    if (weight != null) {
+      form.weightController.text = weight.toString();
+    }
+    final dimensions =
+        data['dimensions'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final height = (dimensions['height'] as num?)?.toDouble();
+    final width = (dimensions['width'] as num?)?.toDouble();
+    final depth = (dimensions['depth'] as num?)?.toDouble();
+    if (height != null) form.heightController.text = height.toString();
+    if (width != null) form.widthController.text = width.toString();
+    if (depth != null) form.depthController.text = depth.toString();
+    form.shippingProfileController.text =
+        _stringOrNull(data['shippingProfileId']) ??
+        form.shippingProfileController.text;
+    final maxPurchase = (data['maxPurchaseLimit'] as num?)?.toInt();
+    if (maxPurchase != null) {
+      form.maxPurchaseLimitController.text = maxPurchase.toString();
+    }
+    final relatedProducts =
+        _stringListFromDynamic(data['relatedProductIds']);
+    if (relatedProducts.isNotEmpty) {
+      form.relatedProductsController.text = relatedProducts.join('\n');
+    }
+    final rating = data['rating'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    final average = (rating['average'] as num?)?.toDouble();
+    if (average != null) {
+      form.ratingAverageController.text = average.toString();
+    }
+    final count = (rating['count'] as num?)?.toInt();
+    if (count != null) {
+      form.ratingCountController.text = count.toString();
+    }
+    final keywords = _stringListFromDynamic(data['searchKeywords']);
+    if (keywords.isNotEmpty) {
+      form.searchKeywordsController.text = keywords.join('\n');
+    }
+    return form;
+  }
+
+  final TextEditingController variantIdController;
+  final TextEditingController nameController;
+  final TextEditingController sizeController;
+  final TextEditingController colorController;
+  final TextEditingController skuController;
+  final TextEditingController barcodeController;
+  final TextEditingController priceOverrideController;
+  final TextEditingController quantityController;
+  final TextEditingController weightController;
+  final TextEditingController heightController;
+  final TextEditingController widthController;
+  final TextEditingController depthController;
+  final TextEditingController shippingProfileController;
+  final TextEditingController maxPurchaseLimitController;
+  final TextEditingController relatedProductsController;
+  final TextEditingController ratingAverageController;
+  final TextEditingController ratingCountController;
+  final TextEditingController searchKeywordsController;
+
+  bool trackInventory = true;
+  bool allowBackorder = false;
+  bool isShippable = true;
+  bool isPhysicalProduct = true;
+
+  void dispose() {
+    variantIdController.dispose();
+    nameController.dispose();
+    sizeController.dispose();
+    colorController.dispose();
+    skuController.dispose();
+    barcodeController.dispose();
+    priceOverrideController.dispose();
+    quantityController.dispose();
+    weightController.dispose();
+    heightController.dispose();
+    widthController.dispose();
+    depthController.dispose();
+    shippingProfileController.dispose();
+    maxPurchaseLimitController.dispose();
+    relatedProductsController.dispose();
+    ratingAverageController.dispose();
+    ratingCountController.dispose();
+    searchKeywordsController.dispose();
   }
 }
 
@@ -7615,16 +8788,32 @@ class _ContentPageState extends State<ContentPage> {
   String _selectedPositioning = _positioningOptions.first;
 
   void _openDatabaseSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const _LibraryDatabaseSheet(),
-    );
+    _openLibraryDatabase(context, initialTab: 0);
   }
 
   void _handlePositioningChanged(String? value) {
     if (value == null || value == _selectedPositioning) return;
     setState(() => _selectedPositioning = value);
+  }
+
+  void _openWhiskeyDatabasePage(BuildContext context) {
+    _openLibraryDatabase(context, initialTab: 0);
+  }
+
+  void _openDistilleryDatabasePage(BuildContext context) {
+    _openLibraryDatabase(context, initialTab: 1);
+  }
+
+  void _openArticlesDatabasePage(BuildContext context) {
+    _openLibraryDatabase(context, initialTab: 2);
+  }
+
+  void _openLibraryDatabase(BuildContext context, {required int initialTab}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LibraryDatabasePage(initialTab: initialTab),
+      ),
+    );
   }
 
   @override
@@ -7708,12 +8897,9 @@ class _ContentPageState extends State<ContentPage> {
         const SizedBox(height: 32),
         Row(
           children: [
-            Expanded(
-              child: Text(
-                'Featured Whiskeys',
-                style:
-                    textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
-              ),
+            Text(
+              'Featured Whiskeys',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
             ),
             const SizedBox(width: 12),
             DropdownButtonHideUnderline(
@@ -7730,45 +8916,50 @@ class _ContentPageState extends State<ContentPage> {
                 onChanged: _handlePositioningChanged,
               ),
             ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => _openWhiskeyDatabasePage(context),
+              child: const Text('See all'),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         _GlobalWhiskeyFeed(positioning: _selectedPositioning),
         const SizedBox(height: 32),
-        Text(
-          'Favorite Producers and Places',
-          style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+        Row(
+          children: [
+            Text(
+              'Producers and Places',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => _openDistilleryDatabasePage(context),
+              child: const Text('See all'),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         const _GlobalDistilleryFeed(),
         const SizedBox(height: 32),
-        Text(
-          'Community Articles',
-          style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+        Row(
+          children: [
+            Text(
+              'Recent Articles',
+              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => _openArticlesDatabasePage(context),
+              child: const Text('See all'),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         const _GlobalArticleFeed(),
       ],
     );
   }
-}
-
-class _ShowcaseData {
-  final String title;
-  final String subtitle;
-  final String footer;
-  final String? badge;
-  final List<_ShowcaseAction> actions;
-  final Future<void> Function(BuildContext context)? onTap;
-
-  const _ShowcaseData({
-    required this.title,
-    required this.subtitle,
-    required this.footer,
-    this.badge,
-    this.actions = const [],
-    this.onTap,
-  });
 }
 
 class _ShowcaseAction {
@@ -7831,133 +9022,15 @@ String _composeProducerLocationLabel(Map<String, dynamic> data) {
   return '$type \u2022 $location';
 }
 
-class _HorizontalShowcase extends StatelessWidget {
-  const _HorizontalShowcase({required this.items});
 
-  final List<_ShowcaseData> items;
+class LibraryDatabasePage extends StatefulWidget {
+  const LibraryDatabasePage({super.key, this.initialTab = 0})
+      : assert(initialTab >= 0 && initialTab < 3);
 
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 220,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _ShowcaseCard(data: items[index]),
-      ),
-    );
-  }
-}
-
-class _ShowcaseCard extends StatelessWidget {
-  const _ShowcaseCard({required this.data});
-
-  final _ShowcaseData data;
+  final int initialTab;
 
   @override
-  Widget build(BuildContext context) {
-    final card = Container(
-      width: 200,
-      height: 200,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.lightNeutral,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.neutralMid),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  data.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.darkGreen,
-                  ),
-                ),
-              ),
-              if (data.badge != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Chip(
-                    label: Text(data.badge!),
-                    backgroundColor: AppColors.neutralLight,
-                  ),
-                ),
-              if (data.actions.isNotEmpty)
-                PopupMenuButton<_ShowcaseAction>(
-                  tooltip: 'Save',
-                  icon: const Icon(
-                    Icons.more_horiz_rounded,
-                    color: AppColors.leatherDark,
-                  ),
-                  onSelected: (action) {
-                    action.onSelected(context);
-                  },
-                  itemBuilder: (context) => [
-                    for (final action in data.actions)
-                      PopupMenuItem<_ShowcaseAction>(
-                        value: action,
-                        child: Row(
-                          children: [
-                            if (action.icon != null) ...[
-                              Icon(
-                                action.icon,
-                                size: 18,
-                                color: AppColors.leatherDark,
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(action.label),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-            ],
-          ),
-          const Spacer(),
-          Text(
-            data.subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.leatherDark),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            data.footer,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.darkGreen),
-          ),
-        ],
-      ),
-    );
-
-    if (data.onTap == null) {
-      return card;
-    }
-
-    return GestureDetector(
-      onTap: () => data.onTap!(context),
-      child: card,
-    );
-  }
-}
-
-class _LibraryDatabaseSheet extends StatefulWidget {
-  const _LibraryDatabaseSheet();
-
-  @override
-  State<_LibraryDatabaseSheet> createState() => _LibraryDatabaseSheetState();
+  State<LibraryDatabasePage> createState() => _LibraryDatabasePageState();
 }
 
 class MerchandisePage extends StatelessWidget {
@@ -7974,8 +9047,16 @@ class MerchandisePage extends StatelessWidget {
   }
 }
 
+typedef MerchandiseItemTapCallback = Future<void> Function(
+  BuildContext context,
+  Map<String, dynamic> data,
+  String documentId,
+);
+
 class _MerchandiseFeed extends StatelessWidget {
-  const _MerchandiseFeed();
+  const _MerchandiseFeed({this.onItemTap});
+
+  final MerchandiseItemTapCallback? onItemTap;
 
   @override
   Widget build(BuildContext context) {
@@ -8010,15 +9091,20 @@ class _MerchandiseFeed extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             for (final doc in docs)
-              _MerchCard(
-                title: doc.data()['title'] as String? ?? 'Untitled Item',
-                description: doc.data()['description'] as String? ?? '',
-                price: (doc.data()['price'] as num? ?? 0).toDouble(),
-                link: doc.data()['link'] as String? ?? '',
-                category: doc.data()['category'] as String? ?? 'Lifestyle',
-                authorLabel: doc.data()['userName'] as String? ?? 'Curator',
-                membership: doc.data()['membershipLevel'] as String?,
-                timestamp: _coerceTimestamp(doc.data()['createdAt']),
+              Builder(
+                builder: (context) {
+                  final data = Map<String, dynamic>.from(doc.data());
+                  data.putIfAbsent('id', () => doc.id);
+                  return _MerchCard.fromData(
+                    data: data,
+                    authorLabel:
+                        data['userName'] as String? ?? 'Curator',
+                    timestamp: _coerceTimestamp(data['createdAt']),
+                    onTap: onItemTap == null
+                        ? null
+                        : () => onItemTap!(context, data, doc.id),
+                  );
+                },
               ),
           ],
         );
@@ -8027,11 +9113,11 @@ class _MerchandiseFeed extends StatelessWidget {
   }
 }
 
-class _LibraryDatabaseSheetState extends State<_LibraryDatabaseSheet> {
+class _LibraryDatabasePageState extends State<LibraryDatabasePage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
-  String _membershipFilter = 'All';
-  List<String> get _membershipFilters => ['All', ...membershipLevels];
+  late TabController _tabController;
 
   @override
   void initState() {
@@ -8040,90 +9126,57 @@ class _LibraryDatabaseSheetState extends State<_LibraryDatabaseSheet> {
       final next = _searchController.text.trim();
       if (next != _query) setState(() => _query = next);
     });
+    _tabController =
+        TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manuscript Database'),
       ),
-      child: SafeArea(
-        child: DefaultTabController(
-          length: 3,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Manuscript Database',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(color: AppColors.darkGreen),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: 'Search bottles, distilleries, or essays...',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        for (final filter in _membershipFilters)
-                          ChoiceChip(
-                            label: Text(filter),
-                            selected: _membershipFilter == filter,
-                            onSelected: (selected) {
-                              if (!selected) return;
-                              setState(() => _membershipFilter = filter);
-                            },
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search bottles, distilleries, or essays...',
               ),
-              const SizedBox(height: 12),
-              const TabBar(
-                isScrollable: true,
-                tabs: [
-                  Tab(text: 'Whiskeys'),
-                  Tab(text: 'Producers and Places'),
-                  Tab(text: 'Articles'),
-                ],
-              ),
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.6,
-                child: TabBarView(
-                  children: [
-                    _DatabaseWhiskeyList(
-                        query: _query, membership: _membershipFilter),
-                    _DatabaseDistilleryList(
-                        query: _query, membership: _membershipFilter),
-                    _DatabaseArticleList(
-                        query: _query, membership: _membershipFilter),
-                  ],
-                ),
-              ),
+            ),
+          ),
+          TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            labelColor: AppColors.darkGreen,
+            tabs: const [
+              Tab(text: 'Whiskeys'),
+              Tab(text: 'Producers and Places'),
+              Tab(text: 'Articles'),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _DatabaseWhiskeyList(query: _query, membership: 'All'),
+                _DatabaseDistilleryList(query: _query, membership: 'All'),
+                _DatabaseArticleList(query: _query, membership: 'All'),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -8382,13 +9435,14 @@ class _DatabaseWhiskeyList extends StatelessWidget {
 }
 
 class _FeaturedWhiskeyCard extends StatelessWidget {
-  const _FeaturedWhiskeyCard({required this.data});
+  const _FeaturedWhiskeyCard({required this.data, this.onTap});
 
   final _FeaturedWhiskeyData data;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       width: 150,
       height: 260,
       decoration: BoxDecoration(
@@ -8502,6 +9556,15 @@ class _FeaturedWhiskeyCard extends StatelessWidget {
         ],
       ),
     );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: card,
+      ),
+    );
   }
 
   Widget _buildImage() {
@@ -8539,6 +9602,20 @@ class _FeaturedWhiskeyData {
     required this.subCategory,
     this.imageUrl,
     this.actions = const [],
+    this.region,
+    this.shortDescription,
+    this.tags = const [],
+    this.abv,
+    this.proof,
+    this.ageStatement,
+    this.releaseType,
+    this.priceLow,
+    this.priceHigh,
+    this.msrp,
+    this.distillery,
+    this.rarity,
+    this.availability,
+    this.membership,
   });
 
   final String title;
@@ -8547,6 +9624,20 @@ class _FeaturedWhiskeyData {
   final String subCategory;
   final String? imageUrl;
   final List<_ShowcaseAction> actions;
+  final String? region;
+  final String? shortDescription;
+  final List<String> tags;
+  final double? abv;
+  final double? proof;
+  final String? ageStatement;
+  final String? releaseType;
+  final double? priceLow;
+  final double? priceHigh;
+  final double? msrp;
+  final String? distillery;
+  final String? rarity;
+  final String? availability;
+  final String? membership;
 
   String get categoryLine =>
       subCategory.trim().isEmpty ? category : '$category - $subCategory';
@@ -8559,6 +9650,13 @@ class _ProducerPlaceCardData {
     required this.location,
     this.imageUrl,
     this.actions = const [],
+    this.shortDescription,
+    this.styles = const [],
+    this.tags = const [],
+    this.websiteUrl,
+    this.isVisitAble,
+    this.signaturePour,
+    this.membership,
   });
 
   final String name;
@@ -8566,16 +9664,24 @@ class _ProducerPlaceCardData {
   final String location;
   final String? imageUrl;
   final List<_ShowcaseAction> actions;
+  final String? shortDescription;
+  final List<String> styles;
+  final List<String> tags;
+  final String? websiteUrl;
+  final bool? isVisitAble;
+  final String? signaturePour;
+  final String? membership;
 }
 
 class _ProducerPlaceCard extends StatelessWidget {
-  const _ProducerPlaceCard({required this.data});
+  const _ProducerPlaceCard({required this.data, this.onTap});
 
   final _ProducerPlaceCardData data;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       width: 240,
       height: 180,
       decoration: BoxDecoration(
@@ -8692,7 +9798,15 @@ class _ProducerPlaceCard extends StatelessWidget {
           ),
         ],
       ),
+    );
 
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: card,
+      ),
     );
   }
 
@@ -9255,6 +10369,27 @@ class _MerchDatabasePageState extends State<MerchDatabasePage> {
     await widget.onAddMerch(context);
   }
 
+  Future<void> _openEditMerchSheet(
+    BuildContext context,
+    Map<String, dynamic> data,
+    String docId,
+  ) async {
+    final payload = {
+      ...data,
+      'id': _stringOrNull(data['id']) ?? docId,
+    };
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _AddMerchSheet(initialData: payload),
+    );
+    if (updated == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Merchandise item updated.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -9279,8 +10414,8 @@ class _MerchDatabasePageState extends State<MerchDatabasePage> {
               ),
             ),
             const SizedBox(height: 12),
-            const Expanded(
-              child: _MerchandiseFeed(),
+            Expanded(
+              child: _MerchandiseFeed(onItemTap: _openEditMerchSheet),
             ),
           ],
         ),
@@ -9319,17 +10454,1081 @@ class _DatabaseArticleList extends StatelessWidget {
       emptyMessage: 'No articles match your filters yet.',
       itemBuilder: (context, doc) {
         final data = doc.data();
-        return _ArticleCard(
-          title: data['title'] as String? ?? 'Untitled Article',
-          summary: data['summary'] as String? ?? '',
-          link: data['link'] as String? ?? '',
-          category: data['category'] as String? ?? 'Story',
-          authorLabel: data['userName'] as String? ?? 'Contributor',
-          membership: data['membershipLevel'] as String?,
-          timestamp: _coerceTimestamp(data['createdAt']),
+        final rawTitle = (data['title'] as String? ?? 'Untitled Article').trim();
+        final title = rawTitle.isEmpty ? 'Untitled Article' : rawTitle;
+        final markdownFilename = (data['markdownFilename'] as String? ?? '').trim();
+        return _DatabaseArticleCard(
+          title: title,
+          category: (data['category'] as String? ?? 'Story').trim(),
+          authorLabel: (data['userName'] as String? ?? 'Contributor').trim(),
+          membership: (data['membershipLevel'] as String?)?.trim(),
+          iconUrl: (data['iconUrl'] as String?)?.trim(),
+          tags: _stringListFrom(data['tags']),
+          createdAt: _coerceTimestamp(data['createdAt']),
+          onTap: () => _openEditDialog(context, doc.id, data),
         );
       },
       filter: _matches,
+    );
+  }
+
+  Future<void> _openEditDialog(
+    BuildContext context,
+    String articleId,
+    Map<String, dynamic> data,
+  ) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditArticleDialog(articleId: articleId, data: data),
+    );
+    if (updated == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Article updated.')),
+      );
+    }
+  }
+}
+
+class _WhiskeyDetailSheet extends StatelessWidget {
+  const _WhiskeyDetailSheet({required this.data});
+
+  final _FeaturedWhiskeyData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final infoChips = _buildInfoChips();
+    final description = data.shortDescription?.trim() ?? '';
+    final hasDescription = description.isNotEmpty;
+    final tagWidgets = data.tags
+        .map((tag) => Chip(
+              label: Text(tag),
+              backgroundColor: AppColors.neutralLight,
+            ))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 20,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              const _SheetHandle(),
+              _DetailHeroImage(imageUrl: data.imageUrl),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                data.title,
+                                style: theme.textTheme.titleLarge
+                                    ?.copyWith(color: AppColors.darkGreen),
+                              ),
+                              if (data.brand.trim().isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    data.brand,
+                                    style: theme.textTheme.bodyMedium
+                                        ?.copyWith(color: AppColors.leatherDark),
+                                  ),
+                                ),
+                              if ((data.distillery ?? '').trim().isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'Producer • ${data.distillery!.trim()}',
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: AppColors.leatherDark),
+                                  ),
+                                ),
+                              if ((data.region ?? '').trim().isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    data.region!,
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: AppColors.leatherDark),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if ((data.membership ?? '').trim().isNotEmpty)
+                          Chip(
+                            label: Text(data.membership!),
+                            backgroundColor: AppColors.neutralLight,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (hasDescription) ...[
+                      Text(
+                        description,
+                        style: theme.textTheme.bodyLarge
+                            ?.copyWith(color: AppColors.darkGreen),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (infoChips.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final label in infoChips)
+                            _DetailChip(label: label),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (tagWidgets.isNotEmpty) ...[
+                      Text(
+                        'Flavor cues',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(color: AppColors.darkGreen),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: tagWidgets,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> _buildInfoChips() {
+    final chips = <String>[];
+    void add(String? value) {
+      if (value == null) return;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      chips.add(trimmed);
+    }
+
+    add(data.subCategory);
+    add(data.ageStatement);
+    if (data.abv != null) {
+      chips.add('${data.abv!.toStringAsFixed(1)}% ABV');
+    }
+    if (data.proof != null) {
+      chips.add('${data.proof!.toStringAsFixed(1)} proof');
+    }
+    add(data.releaseType);
+    add(_buildPriceLabel());
+    add(data.rarity);
+    add(data.availability);
+    return chips;
+  }
+
+  String? _buildPriceLabel() {
+    final segments = <String>[];
+    if (data.msrp != null) {
+      segments.add('MSRP ${_formatCurrency(data.msrp!)}');
+    }
+    if (data.priceLow != null && data.priceHigh != null) {
+      segments.add(
+          'Typical ${_formatCurrency(data.priceLow!)} - ${_formatCurrency(data.priceHigh!)}');
+    }
+    if (segments.isEmpty) return null;
+    return segments.join(' • ');
+  }
+
+  String _formatCurrency(double value) {
+    final decimals = value == value.roundToDouble() ? 0 : 2;
+    return '\$${value.toStringAsFixed(decimals)}';
+  }
+}
+
+class _ProducerPlaceDetailSheet extends StatelessWidget {
+  const _ProducerPlaceDetailSheet({required this.data});
+
+  final _ProducerPlaceCardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final description = data.shortDescription?.trim() ?? '';
+    final hasDescription = description.isNotEmpty;
+    final tagWidgets = data.tags
+        .map((tag) => Chip(
+              label: Text(tag),
+              backgroundColor: AppColors.neutralLight,
+            ))
+        .toList();
+    final styleWidgets = data.styles
+        .map((style) => Chip(
+              label: Text(style),
+              backgroundColor: AppColors.neutralLight,
+            ))
+        .toList();
+    final visitLabel = data.isVisitAble == false
+        ? 'Visits by appointment'
+        : 'Visitors welcome';
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 20,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              const _SheetHandle(),
+              _DetailHeroImage(imageUrl: data.imageUrl),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                data.name,
+                                style: theme.textTheme.titleLarge
+                                    ?.copyWith(color: AppColors.darkGreen),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                data.type,
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(color: AppColors.leatherDark),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                data.location,
+                                style: theme.textTheme.bodySmall
+                                    ?.copyWith(color: AppColors.leatherDark),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if ((data.membership ?? '').trim().isNotEmpty)
+                          Chip(
+                            label: Text(data.membership!),
+                            backgroundColor: AppColors.neutralLight,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            color: AppColors.leatherDark),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            visitLabel,
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.leatherDark),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((data.websiteUrl ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.link, color: AppColors.leatherDark),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              data.websiteUrl!,
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(color: AppColors.leatherDark),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if ((data.signaturePour ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        data.signaturePour!,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: AppColors.leatherDark),
+                      ),
+                    ],
+                    if (hasDescription) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        description,
+                        style: theme.textTheme.bodyLarge
+                            ?.copyWith(color: AppColors.darkGreen),
+                      ),
+                    ],
+                    if (styleWidgets.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Specialties',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(color: AppColors.darkGreen),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: styleWidgets,
+                      ),
+                    ],
+                    if (tagWidgets.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Notable notes',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(color: AppColors.darkGreen),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: tagWidgets,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 48,
+        height: 4,
+        decoration: BoxDecoration(
+          color: AppColors.neutralMid,
+          borderRadius: BorderRadius.circular(999),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailHeroImage extends StatelessWidget {
+  const _DetailHeroImage({this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl == null || imageUrl!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Image.network(
+            imageUrl!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: AppColors.neutralLight,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.broken_image_outlined,
+                color: AppColors.leatherDark,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailChip extends StatelessWidget {
+  const _DetailChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.neutralLight,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: AppColors.leatherDark),
+      ),
+    );
+  }
+}
+
+class _ArticleShowcaseCardData {
+  const _ArticleShowcaseCardData({
+    required this.title,
+    required this.category,
+    required this.author,
+    this.iconUrl,
+    this.badge,
+    this.actions = const [],
+    this.onTap,
+  });
+
+  final String title;
+  final String category;
+  final String author;
+  final String? iconUrl;
+  final String? badge;
+  final List<_ShowcaseAction> actions;
+  final VoidCallback? onTap;
+}
+
+class _ArticleShowcaseCard extends StatelessWidget {
+  const _ArticleShowcaseCard({required this.data});
+
+  final _ArticleShowcaseCardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.neutralMid),
+        color: AppColors.lightNeutral,
+      ),
+      child: Row(
+        children: [
+          _ArticleIconAvatar(iconUrl: data.iconUrl),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  data.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.darkGreen,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  data.category,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.leatherDark,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (data.actions.isNotEmpty)
+            PopupMenuButton<_ShowcaseAction>(
+              tooltip: 'Actions',
+              icon: const Icon(
+                Icons.more_horiz_rounded,
+                color: AppColors.leatherDark,
+              ),
+              onSelected: (action) => action.onSelected(context),
+              itemBuilder: (context) => [
+                for (final action in data.actions)
+                  PopupMenuItem<_ShowcaseAction>(
+                    value: action,
+                    child: Row(
+                      children: [
+                        if (action.icon != null) ...[
+                          Icon(action.icon,
+                              size: 18, color: AppColors.leatherDark),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(action.label),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: data.onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: card,
+      ),
+    );
+  }
+}
+
+class _DatabaseArticleCard extends StatelessWidget {
+  const _DatabaseArticleCard({
+    required this.title,
+    required this.category,
+    required this.authorLabel,
+    required this.membership,
+    required this.createdAt,
+    this.tags = const [],
+    this.iconUrl,
+    this.onTap,
+  });
+
+  final String title;
+  final String category;
+  final String authorLabel;
+  final String? membership;
+  final DateTime createdAt;
+  final List<String> tags;
+  final String? iconUrl;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final formattedTags = tags.isEmpty ? null : tags.take(3).join(' • ');
+    final dateLabel =
+        '${createdAt.month}/${createdAt.day}/${createdAt.year}';
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.neutralLight.withOpacity(0.6)),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _DatabaseArticleThumbnail(
+                  iconUrl: iconUrl,
+                  title: title,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: textTheme.titleMedium
+                            ?.copyWith(color: AppColors.darkGreen),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        category,
+                        style: textTheme.bodyMedium
+                            ?.copyWith(color: AppColors.leatherDark),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        dateLabel,
+                        style: textTheme.bodySmall
+                            ?.copyWith(color: AppColors.leatherDark),
+                      ),
+                      if (formattedTags != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          formattedTags,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.leatherDark,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DatabaseArticleThumbnail extends StatelessWidget {
+  const _DatabaseArticleThumbnail({required this.iconUrl, required this.title});
+
+  final String? iconUrl;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: AppColors.neutralLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        title.isNotEmpty ? title.substring(0, 1).toUpperCase() : 'A',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: AppColors.darkGreen,
+        ),
+      ),
+    );
+
+    if (iconUrl == null || iconUrl!.isEmpty) {
+      return placeholder;
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        iconUrl!,
+        width: 56,
+        height: 56,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => placeholder,
+      ),
+    );
+  }
+}
+
+class _EditArticleDialog extends StatefulWidget {
+  const _EditArticleDialog({required this.articleId, required this.data});
+
+  final String articleId;
+  final Map<String, dynamic> data;
+
+  @override
+  State<_EditArticleDialog> createState() => _EditArticleDialogState();
+}
+
+class _EditArticleDialogState extends State<_EditArticleDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _titleController;
+  late final TextEditingController _subtitleController;
+  late final TextEditingController _tagsController;
+  late final TextEditingController _markdownController;
+  late final TextEditingController _imageController;
+  final PostUploader _iconUploader = PostUploader();
+  late String _category;
+  String? _iconUrl;
+  bool _isUploadingIcon = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.data;
+    _titleController =
+        TextEditingController(text: (data['title'] as String? ?? '').trim());
+    _subtitleController =
+        TextEditingController(text: (data['subtitle'] as String? ?? '').trim());
+    _tagsController = TextEditingController(
+      text: _stringListFrom(data['tags']).join(', '),
+    );
+    _markdownController = TextEditingController(
+      text: (data['markdownFilename'] as String? ?? '').trim(),
+    );
+    _imageController = TextEditingController(
+      text: (data['imageFilename'] as String? ?? '').trim(),
+    );
+    final initialCategory = (data['category'] as String? ?? '').trim();
+    _category = articleCategories.contains(initialCategory)
+        ? initialCategory
+        : articleCategories.first;
+    _iconUrl = (data['iconUrl'] as String?)?.trim();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _subtitleController.dispose();
+    _tagsController.dispose();
+    _markdownController.dispose();
+    _imageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
+    try {
+      final subtitleText = _subtitleController.text.trim();
+      final tags = _tagsController.text
+          .split(',')
+          .map((tag) => tag.trim())
+          .where((tag) => tag.isNotEmpty)
+          .toList();
+      final markdownFilename =
+          _stripAssetPrefix(_markdownController.text, 'assets/articles/');
+      final imageFilename = _stripAssetPrefix(
+        _imageController.text,
+        'assets/images/articles/',
+      );
+
+      await ArticleService().updateArticle(
+        widget.articleId,
+        title: _titleController.text.trim(),
+        subtitle: subtitleText.isEmpty ? null : subtitleText,
+        category: _category,
+        markdownFilename: markdownFilename,
+        tags: tags,
+        imageFilename: imageFilename.isEmpty ? null : imageFilename,
+        iconUrl: _iconUrl,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update article: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Article'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _titleController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(labelText: 'Title'),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _subtitleController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(labelText: 'Subtitle'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _category,
+                items: [
+                  for (final category in articleCategories)
+                    DropdownMenuItem(value: category, child: Text(category)),
+                ],
+                onChanged: _isSaving
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() => _category = value);
+                      },
+                decoration: const InputDecoration(labelText: 'Category'),
+              ),
+              const SizedBox(height: 16),
+              _ArticleIconField(
+                iconUrl: _iconUrl,
+                isUploading: _isUploadingIcon,
+                onUpload:
+                    (_isSaving || _isUploadingIcon) ? null : _uploadIcon,
+                onRemove:
+                    _isSaving || _isUploadingIcon || _iconUrl == null
+                        ? null
+                        : _removeIcon,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _tagsController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(
+                  labelText: 'Tags',
+                  helperText: 'Comma-separated list',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _markdownController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(
+                  labelText: 'Markdown filename',
+                  helperText: 'Only the file name, e.g. whiskey-101.md',
+                ),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _imageController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(
+                  labelText: 'Image filename',
+                  helperText: 'Optional hero image from assets/images/articles/',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _isSaving ? null : _save,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Update'),
+        ),
+      ],
+    );
+  }
+
+  String _stripAssetPrefix(String value, String prefix) {
+    var sanitized = value.trim().replaceAll('\\', '/');
+    final normalizedPrefix = prefix.toLowerCase();
+    if (sanitized.toLowerCase().startsWith(normalizedPrefix)) {
+      sanitized = sanitized.substring(prefix.length);
+    }
+    if (sanitized.startsWith('/')) {
+      sanitized = sanitized.substring(1);
+    }
+    return sanitized;
+  }
+
+  Future<void> _uploadIcon() async {
+    setState(() => _isUploadingIcon = true);
+    try {
+      final url = await _iconUploader.pickAndUploadImage(
+        destinationFolder: 'articles/icons',
+        processingOptions:
+            const ImageProcessingOptions(maxDimension: 900, jpegQuality: 80),
+      );
+      if (!mounted) return;
+      if (url != null) setState(() => _iconUrl = url);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not upload icon: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploadingIcon = false);
+    }
+  }
+
+  void _removeIcon() {
+    setState(() => _iconUrl = null);
+  }
+}
+
+class _ArticleIconField extends StatelessWidget {
+  const _ArticleIconField({
+    required this.iconUrl,
+    required this.isUploading,
+    required this.onUpload,
+    required this.onRemove,
+  });
+
+  final String? iconUrl;
+  final bool isUploading;
+  final VoidCallback? onUpload;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Icon Image',
+          style:
+              theme.textTheme.titleSmall?.copyWith(color: AppColors.darkGreen),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.neutralLight,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              alignment: Alignment.center,
+              child: iconUrl == null
+                  ? const Icon(Icons.article_outlined,
+                      color: AppColors.leatherDark)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        iconUrl!,
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.broken_image_outlined,
+                          color: AppColors.leatherDark,
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Upload a square image to represent this article across the app.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: AppColors.leatherDark),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: onUpload,
+                        icon: isUploading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload_outlined),
+                        label: Text(isUploading ? 'Uploading...' : 'Upload'),
+                      ),
+                      if (iconUrl != null)
+                        TextButton.icon(
+                          onPressed: onRemove,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Remove'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ArticleIconAvatar extends StatelessWidget {
+  const _ArticleIconAvatar({this.iconUrl});
+
+  final String? iconUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 72,
+        height: 72,
+        color: AppColors.neutralLight,
+        alignment: Alignment.center,
+        child: iconUrl == null || iconUrl!.isEmpty
+            ? const Icon(Icons.article_outlined, color: AppColors.leatherDark)
+            : Image.network(
+                iconUrl!,
+                width: 72,
+                height: 72,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.broken_image_outlined,
+                  color: AppColors.leatherDark,
+                    ),
+            ),
+      ),
     );
   }
 }
@@ -9464,6 +11663,10 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
           final rarity = (data['rarityLevel'] as String? ?? '').trim();
           if (!isHighlighted) continue;
           if (rarity.toLowerCase() != positioning.toLowerCase()) continue;
+          final tags = _stringListFrom(data['tags']);
+          final shortDescription =
+              (data['shortDescription'] as String? ?? 'Tasting notes coming soon.')
+                  .trim();
           items.add(
             _FeaturedWhiskeyData(
               title: data['name'] as String? ?? 'Untitled Bottle',
@@ -9488,6 +11691,23 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
                       _handleWhiskeySave(ctx, doc, wishlist: true),
                 ),
               ],
+              region: (data['region'] as String? ??
+                      data['country'] as String? ??
+                      '')
+                  .trim(),
+              shortDescription: shortDescription,
+              tags: tags,
+              abv: (data['abv'] as num?)?.toDouble(),
+              proof: (data['proof'] as num?)?.toDouble(),
+              ageStatement: (data['ageStatement'] as String?)?.trim(),
+              releaseType: (data['releaseType'] as String?)?.trim(),
+              priceLow: (data['priceLow'] as num?)?.toDouble(),
+              priceHigh: (data['priceHigh'] as num?)?.toDouble(),
+              msrp: (data['msrp'] as num?)?.toDouble(),
+              distillery: (data['distilleryName'] as String?)?.trim(),
+              rarity: rarity,
+              availability: (data['availabilityStatus'] as String?)?.trim(),
+              membership: (data['membershipLevel'] as String?)?.trim(),
             ),
           );
         }
@@ -9506,11 +11726,22 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) =>
-                _FeaturedWhiskeyCard(data: items[index]),
+            itemBuilder: (context, index) => _FeaturedWhiskeyCard(
+              data: items[index],
+              onTap: () => _showWhiskeyDetail(context, items[index]),
+            ),
           ),
         );
       },
+    );
+  }
+
+  void _showWhiskeyDetail(BuildContext context, _FeaturedWhiskeyData data) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _WhiskeyDetailSheet(data: data),
     );
   }
 }
@@ -9574,41 +11805,60 @@ class _GlobalArticleFeed extends StatelessWidget {
           );
         }
 
-        final items = [
-          for (final doc in docs)
-            () {
-              final data = doc.data();
-              final rawTitle = (data['title'] as String? ?? 'Untitled Article').trim();
-              final title = rawTitle.isEmpty ? 'Untitled Article' : rawTitle;
-              final markdownFilename =
-                  (data['markdownFilename'] as String? ?? '').trim();
-              return _ShowcaseData(
-                title: title,
-                subtitle: data['category'] as String? ?? 'Story',
-                footer: data['userName'] as String? ?? 'Contributor',
-                badge: data['membershipLevel'] as String?,
-                actions: [
-                  _ShowcaseAction(
-                    label: 'Favorite article',
-                    icon: Icons.bookmark_add_outlined,
-                    onSelected: (ctx) => _favoriteArticle(ctx, doc),
-                  ),
-                ],
-                onTap: markdownFilename.isEmpty
-                    ? null
-                    : (ctx) => Navigator.of(ctx).push(
-                          MaterialPageRoute(
-                            builder: (_) => ArticleDetailPage(
-                              title: title,
-                              markdownFileName: markdownFilename,
-                            ),
-                          ),
-                        ),
-              );
-            }(),
-        ];
-        return _HorizontalShowcase(items: items);
+        final cards = <_ArticleShowcaseCardData>[];
+        for (final doc in docs) {
+          final data = doc.data();
+          final rawTitle = (data['title'] as String? ?? 'Untitled Article').trim();
+          final title = rawTitle.isEmpty ? 'Untitled Article' : rawTitle;
+          final markdownFilename =
+              (data['markdownFilename'] as String? ?? '').trim();
+          cards.add(
+            _ArticleShowcaseCardData(
+              title: title,
+              category: (data['category'] as String? ?? 'Story').trim(),
+              author: (data['userName'] as String? ?? 'Contributor').trim(),
+              badge: (data['membershipLevel'] as String?)?.trim(),
+              iconUrl: (data['iconUrl'] as String?)?.trim(),
+              actions: [
+                _ShowcaseAction(
+                  label: 'Favorite article',
+                  icon: Icons.bookmark_add_outlined,
+                  onSelected: (ctx) => _favoriteArticle(ctx, doc),
+                ),
+              ],
+              onTap: markdownFilename.isEmpty
+                  ? null
+                  : () => _openArticleDetail(context, title, markdownFilename),
+            ),
+          );
+        }
+
+        final limitedCards = cards.take(3).toList();
+        return Column(
+          children: [
+            for (var i = 0; i < limitedCards.length; i++) ...[
+              _ArticleShowcaseCard(data: limitedCards[i]),
+              if (i != limitedCards.length - 1)
+                const SizedBox(height: 12),
+            ],
+          ],
+        );
       },
+    );
+  }
+
+  void _openArticleDetail(
+    BuildContext context,
+    String title,
+    String markdownFilename,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArticleDetailPage(
+          title: title,
+          markdownFileName: markdownFilename,
+        ),
+      ),
     );
   }
 }
@@ -9679,6 +11929,8 @@ class _GlobalDistilleryFeed extends StatelessWidget {
           final locationOnly = _composeProducerLocationOnly(data).trim();
           final locationLabel =
               locationOnly.isEmpty ? 'Location coming soon' : locationOnly;
+          final styles = _stringListFrom(data['primaryStyles']);
+          final tags = _stringListFrom(data['tags']);
           items.add(
             _ProducerPlaceCardData(
               name: data['name'] as String? ?? 'Untitled Producer or Place',
@@ -9692,6 +11944,15 @@ class _GlobalDistilleryFeed extends StatelessWidget {
                   onSelected: (ctx) => _favoriteDistillery(ctx, doc),
                 ),
               ],
+              shortDescription:
+                  (data['shortDescription'] as String? ?? 'Details coming soon.')
+                      .trim(),
+              styles: styles,
+              tags: tags,
+              websiteUrl: (data['websiteUrl'] as String?)?.trim(),
+              isVisitAble: data['isVisitAble'] as bool?,
+              signaturePour: (data['signaturePour'] as String?)?.trim(),
+              membership: (data['membershipLevel'] as String?)?.trim(),
             ),
           );
         }
@@ -9703,11 +11964,25 @@ class _GlobalDistilleryFeed extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) =>
-                _ProducerPlaceCard(data: items[index]),
+            itemBuilder: (context, index) => _ProducerPlaceCard(
+              data: items[index],
+              onTap: () => _showProducerDetail(context, items[index]),
+            ),
           ),
         );
       },
+    );
+  }
+
+  void _showProducerDetail(
+    BuildContext context,
+    _ProducerPlaceCardData data,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ProducerPlaceDetailSheet(data: data),
     );
   }
 }
