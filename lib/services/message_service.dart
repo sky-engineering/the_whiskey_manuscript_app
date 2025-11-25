@@ -48,6 +48,27 @@ class MessageService {
             ? recipientDisplayName
             : ((recipientData['email'] as String?)?.trim() ?? 'Member');
 
+    final chatRoomId = _chatRoomId(sender.uid, toUserId);
+
+    await _ensureChatRoom(
+      roomId: chatRoomId,
+      senderId: sender.uid,
+      senderProfile: _buildParticipantProfile(
+        userId: sender.uid,
+        displayName: senderName,
+        email: sender.email,
+        membershipLevel: senderData['membershipLevel'] as String?,
+      ),
+      recipientId: toUserId,
+      recipientProfile: _buildParticipantProfile(
+        userId: toUserId,
+        displayName: recipientName,
+        email: recipientData['email'] as String?,
+        membershipLevel: recipientData['membershipLevel'] as String?,
+      ),
+      lastMessage: trimmed,
+    );
+
     await _firestore.collection('messages').add({
       'fromUserId': sender.uid,
       'fromDisplayName': senderName,
@@ -59,8 +80,10 @@ class MessageService {
       'toMembershipLevel': recipientData['membershipLevel'],
       'message': trimmed,
       'sentAt': FieldValue.serverTimestamp(),
+      'chatRoomId': chatRoomId,
     });
   }
+
   Future<void> deleteMessage(String messageId) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -82,4 +105,57 @@ class MessageService {
     await docRef.delete();
   }
 
+  Future<void> _ensureChatRoom({
+    required String roomId,
+    required String senderId,
+    required Map<String, dynamic> senderProfile,
+    required String recipientId,
+    required Map<String, dynamic> recipientProfile,
+    required String lastMessage,
+  }) async {
+    final chatRoomRef = _firestore.collection('chatRooms').doc(roomId);
+    final existing = await chatRoomRef.get();
+
+    final data = <String, dynamic>{
+      'id': roomId,
+      'participants': [senderId, recipientId],
+      'participantIds': {
+        senderId: true,
+        recipientId: true,
+      },
+      'participantProfiles': {
+        senderId: senderProfile,
+        recipientId: recipientProfile,
+      },
+      'lastMessage': lastMessage,
+      'lastMessageSenderId': senderId,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (!existing.exists) {
+      data['createdAt'] = FieldValue.serverTimestamp();
+    }
+
+    await chatRoomRef.set(data, SetOptions(merge: true));
+  }
+
+  String _chatRoomId(String a, String b) {
+    final participants = [a, b]..sort();
+    return participants.join('_');
+  }
+
+  Map<String, dynamic> _buildParticipantProfile({
+    required String userId,
+    required String displayName,
+    String? email,
+    String? membershipLevel,
+  }) {
+    return {
+      'userId': userId,
+      'displayName': displayName,
+      if (email != null) 'email': email,
+      if (membershipLevel != null) 'membershipLevel': membershipLevel,
+    };
+  }
 }

@@ -194,46 +194,26 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && request.auth.uid == resource.data.userId;
     }
 
-    function _hasValidMerchPrice(price) {
-      return price is map
-        && price.base is number
-        && (price.compareAt == null || price.compareAt is number)
-        && price.currency is string && price.currency.size() > 0
-        && (price.taxCategory == null || price.taxCategory is string);
-    }
-
-    function _hasValidMerchData(data) {
-      return data.userId is string && data.userId.size() > 0
-        && data.title is string && data.title.size() > 0
-        && data.category is string && data.category.size() > 0
-        && _hasValidMerchPrice(data.price)
-        && data.variants is list && data.variants.size() > 0
-        && (data.description == null || data.description is string)
-        && (data.subtitle == null || data.subtitle is string)
-        && (data.brand == null || data.brand is string)
-        && (data.thumbnailUrl == null || data.thumbnailUrl is string)
-        && (data.purchaseLink == null || data.purchaseLink is string)
-        && (data.link == null || data.link is string)
-        && (data.images == null || data.images is list)
-        && (data.tags == null || data.tags is list)
-        && (data.membershipExclusiveTier == null || data.membershipExclusiveTier is string)
-        && (data.membershipDiscounts == null || data.membershipDiscounts is map)
-        && data.isActive is bool;
-    }
-
     match /merch/{itemId} {
       allow read: if true;
       allow create: if isSignedIn()
-        && request.auth.uid == request.resource.data.userId
-        && _hasValidMerchData(request.resource.data)
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
+        && request.auth.uid == request.resource.data.userId;
       allow update: if isSignedIn()
-        && request.auth.uid == resource.data.userId
-        && _hasValidMerchData(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.updatedAt == request.time;
+        && request.auth.uid == resource.data.userId;
       allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    function _chatRoomHasUser(data) {
+      return data.participantIds is map
+        && request.auth != null
+        && data.participantIds[request.auth.uid] == true;
+    }
+
+    match /chatRooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     match /events/{eventId} {
@@ -255,18 +235,7 @@ service cloud.firestore {
         (request.auth.uid == resource.data.fromUserId ||
          request.auth.uid == resource.data.toUserId);
       allow create: if isSignedIn()
-        && request.auth.uid == request.resource.data.fromUserId
-        && request.resource.data.keys().hasOnly(['fromUserId','fromDisplayName','fromEmail','fromMembershipLevel','toUserId','toDisplayName','toEmail','toMembershipLevel','message','sentAt'])
-        && request.resource.data.fromUserId is string
-        && request.resource.data.fromDisplayName is string && request.resource.data.fromDisplayName.size() > 0
-        && (request.resource.data.fromEmail == null || request.resource.data.fromEmail is string)
-        && (request.resource.data.fromMembershipLevel == null || request.resource.data.fromMembershipLevel is string)
-        && request.resource.data.toUserId is string
-        && request.resource.data.toDisplayName is string && request.resource.data.toDisplayName.size() > 0
-        && (request.resource.data.toEmail == null || request.resource.data.toEmail is string)
-        && (request.resource.data.toMembershipLevel == null || request.resource.data.toMembershipLevel is string)
-        && request.resource.data.message is string && request.resource.data.message.size() > 0
-        && request.resource.data.sentAt == request.time;
+        && request.auth.uid == request.resource.data.fromUserId;
       allow delete: if isSignedIn() &&
         (request.auth.uid == resource.data.fromUserId ||
          request.auth.uid == resource.data.toUserId);

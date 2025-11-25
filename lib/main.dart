@@ -10195,9 +10195,6 @@ class ArticleDatabasePage extends StatefulWidget {
 class _ArticleDatabasePageState extends State<ArticleDatabasePage> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
-  String _membershipFilter = 'All';
-
-  List<String> get _membershipFilters => ['All', ...membershipLevels];
 
   @override
   void initState() {
@@ -10242,26 +10239,10 @@ class _ArticleDatabasePageState extends State<ArticleDatabasePage> {
               ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final filter in _membershipFilters)
-                  ChoiceChip(
-                    label: Text(filter),
-                    selected: _membershipFilter == filter,
-                    onSelected: (selected) {
-                      if (!selected) return;
-                      setState(() => _membershipFilter = filter);
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
             Expanded(
               child: _DatabaseArticleList(
                 query: _query,
-                membership: _membershipFilter,
+                membership: 'All',
               ),
             ),
           ],

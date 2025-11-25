@@ -2,7 +2,7 @@ name: the_whiskey_manuscript_app
 description: The Whiskey Manuscript — mobile app.
 publish_to: "none"
 
-version: 1.0.7
+version: 1.0.8
 
 environment:
   sdk: ^3.5.0
@@ -21,6 +21,7 @@ dependencies:
   flutter_markdown: ^0.6.21
   uuid: ^4.5.0
   image: ^4.1.4
+  cached_network_image: ^3.3.1
 
 
 dev_dependencies:
