@@ -1,8 +1,8 @@
 name: the_whiskey_manuscript_app
-description: The Whiskey Manuscript — mobile app.
+description: The Whiskey Manuscript mobile app.
 publish_to: "none"
 
-version: 1.0.8
+version: 1.0.9
 
 environment:
   sdk: ^3.5.0
@@ -28,6 +28,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  fake_cloud_firestore: ^4.0.0
 
 flutter:
   uses-material-design: true

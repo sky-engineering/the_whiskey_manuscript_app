@@ -101,8 +101,47 @@ class MessageService {
     if (senderId != user.uid && recipientId != user.uid) {
       throw Exception('You can only delete your messages.');
     }
+    final chatRoomId = data?['chatRoomId'] as String?;
 
     await docRef.delete();
+
+    if (chatRoomId != null) {
+      await _refreshChatRoomPreview(chatRoomId);
+    }
+  }
+
+  Future<void> _refreshChatRoomPreview(String roomId) async {
+    final chatRoomRef = _firestore.collection('chatRooms').doc(roomId);
+    final latestSnapshot = await _firestore
+        .collection('messages')
+        .where('chatRoomId', isEqualTo: roomId)
+        .orderBy('sentAt', descending: true)
+        .limit(1)
+        .get();
+
+    if (latestSnapshot.docs.isEmpty) {
+      await chatRoomRef.set(
+        {
+          'lastMessage': null,
+          'lastMessageSenderId': null,
+          'lastMessageAt': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      return;
+    }
+
+    final latest = latestSnapshot.docs.first.data();
+    await chatRoomRef.set(
+      {
+        'lastMessage': latest['message'],
+        'lastMessageSenderId': latest['fromUserId'],
+        'lastMessageAt': latest['sentAt'] ?? FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
   }
 
   Future<void> _ensureChatRoom({

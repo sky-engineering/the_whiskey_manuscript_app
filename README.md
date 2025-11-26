@@ -1,16 +1,24 @@
-# the_whiskey_manuscript_app
+# The Whiskey Manuscript App
 
-A new Flutter project.
+Internal dashboard that lets members browse content, manage libraries, and chat
+with their friends. The project is a standard Flutter application that targets
+Android, iOS, web, and desktop via `flutter run`.
 
-## Getting Started
+## Local Development
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run -d chrome   # or any other connected device
+```
 
-A few resources to get you started if this is your first Flutter project:
+### Required Firestore Indexes
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Direct messages rely on a composite index so that each chat room can stream its
+history ordered by `sentAt`. Deploy the index definition after creating your
+Firebase project:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+firebase deploy --only firestore:indexes
+```
+
+To see the exact configuration, check `firestore.indexes.json` in the repo.

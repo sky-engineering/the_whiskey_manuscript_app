@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:the_whiskey_manuscript_app/main.dart';
+import 'package:the_whiskey_manuscript_app/src/dashboard/dashboard_shell.dart';
 
 const _testTabs = <DashboardTabConfig>[
   DashboardTabConfig(
@@ -43,7 +43,7 @@ void main() {
     expect(find.text('Social view'), findsOneWidget);
     expect(find.text('Profile view'), findsNothing);
 
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.byIcon(Icons.person).last);
     await tester.pumpAndSettle();
 
     expect(find.text('Profile view'), findsOneWidget);
