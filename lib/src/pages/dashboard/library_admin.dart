@@ -117,7 +117,7 @@ class _LibraryDatabasePageState extends State<LibraryDatabasePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manuscript Database'),
+        title: const Text('The TWM Database'),
       ),
       body: Column(
         children: [
@@ -134,7 +134,10 @@ class _LibraryDatabasePageState extends State<LibraryDatabasePage>
           TabBar(
             controller: _tabController,
             isScrollable: true,
+            tabAlignment: TabAlignment.center,
             labelColor: AppColors.darkGreen,
+            unselectedLabelColor: AppColors.darkGreen.withOpacity(0.35),
+            indicator: const BoxDecoration(),
             tabs: const [
               Tab(text: 'Whiskeys'),
               Tab(text: 'Producers and Places'),
@@ -1409,6 +1412,98 @@ class EventsDatabasePage extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+
+class FeaturedWhiskeyAdminPage extends StatefulWidget {
+  const FeaturedWhiskeyAdminPage({super.key});
+
+  @override
+  State<FeaturedWhiskeyAdminPage> createState() =>
+      _FeaturedWhiskeyAdminPageState();
+}
+
+class _FeaturedWhiskeyAdminPageState
+    extends State<FeaturedWhiskeyAdminPage> {
+  static const List<String> _positioningOptions = [
+    'Everyday',
+    'Limited',
+    'Annual',
+    'Ultra-Rare',
+  ];
+
+  String _selectedPositioning = _positioningOptions.first;
+
+  void _handlePositioningChanged(String? value) {
+    if (value == null || value == _selectedPositioning) return;
+    setState(() => _selectedPositioning = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Featured Whiskeys'),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Highlighted bottles by positioning',
+                    style: textTheme.titleMedium
+                        ?.copyWith(color: AppColors.darkGreen),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.darkGreen, width: 1.2),
+                    color: AppColors.neutralLight,
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedPositioning,
+                      isDense: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      items: [
+                        for (final option in _positioningOptions)
+                          DropdownMenuItem(
+                            value: option,
+                            child: Text(option),
+                          ),
+                      ],
+                      onChanged: _handlePositioningChanged,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Only whiskeys marked as highlighted appear in this list.',
+              style: textTheme.bodySmall
+                  ?.copyWith(color: AppColors.leatherDark.withOpacity(0.8)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _GlobalWhiskeyFeed(positioning: _selectedPositioning),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3086,3 +3181,5 @@ class _GlobalDistilleryFeed extends StatelessWidget {
     );
   }
 }
+
+

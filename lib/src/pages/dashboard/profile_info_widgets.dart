@@ -11,7 +11,6 @@ class _ProfileInfoCard extends StatefulWidget {
     required this.emailVerified,
     required this.membership,
     required this.membershipDescription,
-    required this.memberSince,
     required this.firstName,
     required this.lastName,
     required this.countryCode,
@@ -32,7 +31,6 @@ class _ProfileInfoCard extends StatefulWidget {
   final bool emailVerified;
   final String membership;
   final String membershipDescription;
-  final DateTime? memberSince;
   final String? firstName;
   final String? lastName;
   final String countryCode;
@@ -166,12 +164,12 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _openMembershipDetails() {
+  void _openMembershipManagement() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MembershipDetailsPage(
-          userId: widget.userId,
-          fallbackTier: widget.membership,
+        builder: (_) => MembershipManagementPage(
+          initialMembership: widget.membership,
+          onMembershipChanged: widget.onMembershipChanged,
         ),
       ),
     );
@@ -195,7 +193,6 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final memberSince = widget.memberSince;
     final nameParts = <String>[
       if (widget.firstName != null && widget.firstName!.trim().isNotEmpty)
         widget.firstName!.trim(),
@@ -216,91 +213,60 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  radius: 36,
+                  radius: 72,
                   backgroundColor: AppColors.darkGreen,
                   foregroundColor: AppColors.onDark,
                   child: Text(
                     widget.initials,
                     style: const TextStyle(
-                      fontSize: 28,
+                      fontSize: 42,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 24),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         resolvedName,
-                        style: textTheme.titleLarge
-                            ?.copyWith(color: AppColors.darkGreen),
+                        style: textTheme.titleMedium?.copyWith(
+                          color: AppColors.darkGreen,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _openMembershipManagement,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          alignment: Alignment.centerLeft,
+                        ),
+                        child: Text(
+                          'Membership Type: ${widget.membership}',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: AppColors.leatherDark,
+                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              widget.email,
-                              style: textTheme.bodyLarge
-                                  ?.copyWith(color: AppColors.leatherDark),
-                            ),
-                          ),
-                          Icon(
-                            Icons.verified,
-                            size: 20,
-                            color: widget.emailVerified
-                                ? Colors.green
-                                : AppColors.leatherDark.withValues(alpha: 0.4),
-                          ),
-                        ],
-                      ),
-                      if (memberSince != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Member since //',
-                          style: textTheme.bodyMedium
-                              ?.copyWith(color: AppColors.leatherDark),
+                      Text(
+                        widget.membershipDescription,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: AppColors.leatherDark.withOpacity(0.8),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: _ProfileInfoRow(
-                    label: 'Membership',
-                    value: ' · ',
-                  ),
-                ),
-                TextButton(
-                  onPressed: _openMembershipDetails,
-                  child: const Text('View details'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: widget.membership,
-              decoration: const InputDecoration(
-                labelText: 'Update level',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                for (final option in membershipLevels)
-                  DropdownMenuItem(
-                    value: option,
-                    child: Text(option),
-                  ),
-              ],
-              onChanged: (value) => widget.onMembershipChanged(value),
-            ),
-            const SizedBox(height: 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -618,65 +584,137 @@ class _ProfileEditableField extends StatelessWidget {
   }
 }
 
-class MembershipDetailsPage extends StatelessWidget {
-  const MembershipDetailsPage({
+class MembershipManagementPage extends StatefulWidget {
+  const MembershipManagementPage({
     super.key,
-    required this.userId,
-    required this.fallbackTier,
+    required this.initialMembership,
+    required this.onMembershipChanged,
   });
 
-  final String userId;
-  final String fallbackTier;
+  final String initialMembership;
+  final Future<void> Function(String? level) onMembershipChanged;
+
+  @override
+  State<MembershipManagementPage> createState() =>
+      _MembershipManagementPageState();
+}
+
+class _MembershipManagementPageState extends State<MembershipManagementPage> {
+  late String _selectedLevel;
+  bool _isSaving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLevel = widget.initialMembership;
+  }
+
+  Future<void> _handleSave() async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
+    try {
+      await widget.onMembershipChanged(_selectedLevel);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not update: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final docStream =
-        FirebaseFirestore.instance.collection('users').doc(userId);
+    final textTheme = Theme.of(context).textTheme;
+    final description =
+        membershipDescriptions[_selectedLevel] ?? 'Exclusive experiences.';
+    final canSave = _selectedLevel != widget.initialMembership;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Membership details')),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: docStream.snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(child: Text('Unable to load membership.'));
-          }
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final data = snapshot.data?.data() ?? const <String, dynamic>{};
-          final tier = (data['membershipLevel'] as String?) ?? fallbackTier;
-          final description =
-              membershipDescriptions[tier] ?? 'Exclusive experiences.';
-          return Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(title: const Text('Update membership')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose your membership type',
+              style: textTheme.titleMedium?.copyWith(
+                color: AppColors.darkGreen,
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedLevel,
+              decoration: const InputDecoration(
+                labelText: 'Membership level',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final option in membershipLevels)
+                  DropdownMenuItem(
+                    value: option,
+                    child: Text(option),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _selectedLevel = value;
+                  _error = null;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            Text(
+              description,
+              style: textTheme.bodyLarge?.copyWith(
+                color: AppColors.leatherDark,
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: textTheme.bodySmall?.copyWith(
+                  color: Colors.redAccent,
+                ),
+              ),
+            ],
+            const Spacer(),
+            Row(
               children: [
-                Text(
-                  tier,
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(color: AppColors.darkGreen),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: canSave && !_isSaving ? _handleSave : null,
+                    child: _isSaving
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white),
+                            ),
+                          )
+                        : const Text('Save changes'),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  description,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(color: AppColors.leatherDark),
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed:
+                      _isSaving ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
                 ),
               ],
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }

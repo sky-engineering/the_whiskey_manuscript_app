@@ -152,7 +152,6 @@ class ProfilePage extends StatelessWidget {
             membershipDescriptions[membership] ?? 'Exclusive experiences.';
         final roleValue = (userData['role'] as String? ?? 'user').toLowerCase();
         final isAdmin = roleValue == 'admin';
-        final metadata = user.metadata.creationTime;
         final email = user.email ?? 'No email available';
         final displayName = (user.displayName ?? email).trim();
         final initials = _initialsFor(displayName);
@@ -228,7 +227,6 @@ class ProfilePage extends StatelessWidget {
               emailVerified: emailVerified,
               membership: membership,
               membershipDescription: membershipDescription,
-              memberSince: metadata,
               firstName: firstName,
               lastName: lastName,
               countryCode: countryCode,
@@ -309,6 +307,18 @@ class ProfilePage extends StatelessWidget {
                     label: 'Articles',
                     onTap: () => _openArticlesDatabasePage(context),
                   ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Additional Links',
+                style: textTheme.titleMedium
+                    ?.copyWith(color: AppColors.leatherDark),
+              ),
+              const SizedBox(height: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   _DatabaseLinkButton(
                     label: 'Merchandise',
                     onTap: () => _openMerchDatabasePage(context),
@@ -316,6 +326,14 @@ class ProfilePage extends StatelessWidget {
                   _DatabaseLinkButton(
                     label: 'Events',
                     onTap: () => _openEventsDatabasePage(context),
+                  ),
+                  _DatabaseLinkButton(
+                    label: 'Featured Whiskeys',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const FeaturedWhiskeyAdminPage(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -380,3 +398,5 @@ class _PageLayout extends StatelessWidget {
     );
   }
 }
+
+
