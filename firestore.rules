@@ -209,6 +209,13 @@ service cloud.firestore {
         && data.participantIds[request.auth.uid] == true;
     }
 
+    function _isChatRoomParticipant(roomId) {
+      return request.auth != null
+        && roomId is string
+        && exists(/databases/$(database)/documents/chatRooms/$(roomId))
+        && _chatRoomHasUser(get(/databases/$(database)/documents/chatRooms/$(roomId)).data);
+    }
+
     match /chatRooms/{roomId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
@@ -231,9 +238,10 @@ service cloud.firestore {
     }
 
     match /messages/{messageId} {
-      allow read: if isSignedIn() &&
-        (request.auth.uid == resource.data.fromUserId ||
-         request.auth.uid == resource.data.toUserId);
+      allow read: if (isSignedIn() &&
+          (request.auth.uid == resource.data.fromUserId ||
+           request.auth.uid == resource.data.toUserId))
+        || _isChatRoomParticipant(resource.data.chatRoomId);
       allow create: if isSignedIn()
         && request.auth.uid == request.resource.data.fromUserId;
       allow delete: if isSignedIn() &&

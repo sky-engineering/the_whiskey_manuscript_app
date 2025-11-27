@@ -248,12 +248,10 @@ class _SocialPageState extends State<SocialPage> {
             final imageUrl = data['imageUrl'] as String?;
             final firstName = (data['firstName'] as String?)?.trim();
             final lastName = (data['lastName'] as String?)?.trim();
-            final displayName = (data['displayName'] as String?)?.trim();
             final email = (data['email'] as String?)?.trim();
             final resolvedName = _resolvePostAuthorName(
               firstName: firstName,
               lastName: lastName,
-              displayName: displayName,
               fallbackEmail: email,
             );
             final caption = (data['caption'] as String? ?? '').trim();
@@ -518,38 +516,62 @@ class _UserPostsListState extends State<_UserPostsList> {
           );
         }
 
-        return Column(
-          children: docs.map((doc) {
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 4,
+            crossAxisSpacing: 4,
+            childAspectRatio: 1,
+          ),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final doc = docs[index];
             final data = doc.data();
-            final firstName = (data['firstName'] as String?)?.trim();
-            final lastName = (data['lastName'] as String?)?.trim();
-            final displayName = (data['displayName'] as String?)?.trim();
-            final email = (data['email'] as String?)?.trim();
-            final likedBy =
-                List<String>.from((data['likedBy'] as List<dynamic>? ?? []));
-            final likeCount = data['likeCount'] as int? ?? likedBy.length;
-            final commentCount = data['commentCount'] as int? ?? 0;
-            return _PostCard(
-              authorLabel: _resolvePostAuthorName(
-                firstName: firstName,
-                lastName: lastName,
-                displayName: displayName,
-                fallbackEmail: email ?? 'You',
-              ),
-              timestamp: _coerceTimestamp(data['timestamp']),
-              imageUrl: data['imageUrl'] as String?,
-              caption: (data['caption'] as String? ?? '').trim(),
-              likeCount: likeCount,
-              commentCount: commentCount,
-              onShowLikes: () => showLikesBottomSheet(context, likedBy),
-              onOpenComments: () =>
-                  showCommentsBottomSheet(context, postId: doc.id),
-              onDelete: () => _deletePost(context, doc.id),
+            final imageUrl = (data['imageUrl'] as String?)?.trim();
+            return GestureDetector(
               onTap: () => _openPostDetail(doc.id),
+              onLongPress: () => _deletePost(context, doc.id),
+              child: Container(
+                color: AppColors.neutralLight,
+                child: _PostImagePreview(imageUrl: imageUrl),
+              ),
             );
-          }).toList(),
+          },
         );
       },
+    );
+  }
+}
+
+class _PostImagePreview extends StatelessWidget {
+  const _PostImagePreview({this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Image.network(
+        imageUrl!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+      );
+    }
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return const Center(
+      child: Icon(
+        Icons.photo_outlined,
+        color: AppColors.leatherDark,
+        size: 32,
+      ),
     );
   }
 }

@@ -94,6 +94,16 @@ class UserLibraryService {
     );
   }
 
+  Future<void> removeFavoriteDistillery(String distilleryId) async {
+    final userId = _requireUserId();
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('favoriteDistilleries')
+        .doc(distilleryId)
+        .delete();
+  }
+
   Future<void> addFavoriteArticle({
     required String articleId,
     required String title,
@@ -116,6 +126,16 @@ class UserLibraryService {
       },
       SetOptions(merge: true),
     );
+  }
+
+  Future<void> removeFavoriteArticle(String articleId) async {
+    final userId = _requireUserId();
+    await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('favoriteArticles')
+        .doc(articleId)
+        .delete();
   }
 
   String _requireUserId() {

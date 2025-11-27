@@ -138,6 +138,7 @@ class _LibraryDatabasePageState extends State<LibraryDatabasePage>
             labelColor: AppColors.darkGreen,
             unselectedLabelColor: AppColors.darkGreen.withOpacity(0.35),
             indicator: const BoxDecoration(),
+            dividerColor: Colors.transparent,
             tabs: const [
               Tab(text: 'Whiskeys'),
               Tab(text: 'Producers and Places'),
@@ -476,37 +477,31 @@ class _FeaturedWhiskeyCard extends StatelessWidget {
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
+                      child: PopupMenuButton<_ShowcaseAction>(
+                        tooltip: 'Add to library',
+                        icon: const Icon(
+                          Icons.add_circle_rounded,
+                          color: AppColors.leather,
+                          size: 36,
                         ),
-                        child: PopupMenuButton<_ShowcaseAction>(
-                          tooltip: 'Save',
-                          icon: const Icon(
-                            Icons.more_horiz_rounded,
-                            color: Colors.white,
-                          ),
-                          color: Colors.white,
-                          onSelected: (action) => action.onSelected(context),
-                          itemBuilder: (context) => [
-                            for (final action in data.actions)
-                              PopupMenuItem<_ShowcaseAction>(
-                                value: action,
-                                child: Row(
-                                  children: [
-                                    if (action.icon != null) ...[
-                                      Icon(action.icon,
-                                          size: 18,
-                                          color: AppColors.leatherDark),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    Text(action.label),
+                        color: Colors.white,
+                        onSelected: (action) => action.onSelected(context),
+                        itemBuilder: (context) => [
+                          for (final action in data.actions)
+                            PopupMenuItem<_ShowcaseAction>(
+                              value: action,
+                              child: Row(
+                                children: [
+                                  if (action.icon != null) ...[
+                                    Icon(action.icon,
+                                        size: 18, color: AppColors.leatherDark),
+                                    const SizedBox(width: 8),
                                   ],
-                                ),
+                                  Text(action.label),
+                                ],
                               ),
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
                     ),
                 ],
@@ -627,6 +622,7 @@ class _FeaturedWhiskeyData {
     this.rarity,
     this.availability,
     this.membership,
+    this.id,
   });
 
   final String title;
@@ -649,6 +645,7 @@ class _FeaturedWhiskeyData {
   final String? rarity;
   final String? availability;
   final String? membership;
+  final String? id;
 
   String get categoryLine =>
       subCategory.trim().isEmpty ? category : '$category - $subCategory';
@@ -660,7 +657,6 @@ class _ProducerPlaceCardData {
     required this.type,
     required this.location,
     this.imageUrl,
-    this.actions = const [],
     this.shortDescription,
     this.styles = const [],
     this.tags = const [],
@@ -674,7 +670,6 @@ class _ProducerPlaceCardData {
   final String type;
   final String location;
   final String? imageUrl;
-  final List<_ShowcaseAction> actions;
   final String? shortDescription;
   final List<String> styles;
   final List<String> tags;
@@ -685,8 +680,9 @@ class _ProducerPlaceCardData {
 }
 
 _FeaturedWhiskeyData _featuredWhiskeyDataFromMap(
-  Map<String, dynamic> data,
-) {
+  Map<String, dynamic> data, {
+  String? docId,
+}) {
   final name = (data['name'] as String? ?? 'Untitled Bottle').trim();
   final brand = (data['brand'] as String? ?? '').trim();
   final category = (data['category'] as String? ??
@@ -719,6 +715,7 @@ _FeaturedWhiskeyData _featuredWhiskeyDataFromMap(
     rarity: (data['rarityLevel'] as String?)?.trim(),
     availability: (data['availabilityStatus'] as String?)?.trim(),
     membership: (data['membershipLevel'] as String?)?.trim(),
+    id: docId,
   );
 }
 
@@ -743,10 +740,17 @@ _ProducerPlaceCardData _producerPlaceDataFromMap(
 }
 
 class _ProducerPlaceCard extends StatelessWidget {
-  const _ProducerPlaceCard({required this.data, this.onTap});
+  const _ProducerPlaceCard({
+    required this.data,
+    this.onTap,
+    this.isFavorited = false,
+    this.onToggleFavorite,
+  });
 
   final _ProducerPlaceCardData data;
   final VoidCallback? onTap;
+  final bool isFavorited;
+  final Future<void> Function()? onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -769,43 +773,19 @@ class _ProducerPlaceCard extends StatelessWidget {
               child: Stack(
                 children: [
                   Positioned.fill(child: _buildImage()),
-                  if (data.actions.isNotEmpty)
+                  if (onToggleFavorite != null)
                     Positioned(
-                      top: 8,
-                      right: 8,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        iconSize: 26,
+                        color: isFavorited ? AppColors.leather : Colors.white,
+                        icon: Icon(
+                          isFavorited
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_outline_rounded,
                         ),
-                        child: PopupMenuButton<_ShowcaseAction>(
-                          tooltip: 'Actions',
-                          icon: const Icon(
-                            Icons.more_horiz_rounded,
-                            color: Colors.white,
-                          ),
-                          color: Colors.white,
-                          onSelected: (action) => action.onSelected(context),
-                          itemBuilder: (context) => [
-                            for (final action in data.actions)
-                              PopupMenuItem<_ShowcaseAction>(
-                                value: action,
-                                child: Row(
-                                  children: [
-                                    if (action.icon != null) ...[
-                                      Icon(
-                                        action.icon,
-                                        size: 18,
-                                        color: AppColors.leatherDark,
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    Text(action.label),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
+                        onPressed: () => onToggleFavorite?.call(),
                       ),
                     ),
                 ],
@@ -1417,7 +1397,6 @@ class EventsDatabasePage extends StatelessWidget {
   }
 }
 
-
 class FeaturedWhiskeyAdminPage extends StatefulWidget {
   const FeaturedWhiskeyAdminPage({super.key});
 
@@ -1426,86 +1405,460 @@ class FeaturedWhiskeyAdminPage extends StatefulWidget {
       _FeaturedWhiskeyAdminPageState();
 }
 
-class _FeaturedWhiskeyAdminPageState
-    extends State<FeaturedWhiskeyAdminPage> {
-  static const List<String> _positioningOptions = [
+class _FeaturedWhiskeyAdminPageState extends State<FeaturedWhiskeyAdminPage> {
+  static const List<String> _rarityCategories = [
     'Everyday',
     'Limited',
     'Annual',
     'Ultra-Rare',
   ];
 
-  String _selectedPositioning = _positioningOptions.first;
-
-  void _handlePositioningChanged(String? value) {
-    if (value == null || value == _selectedPositioning) return;
-    setState(() => _selectedPositioning = value);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final stream = FirebaseFirestore.instance
+        .collection('whiskeys')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Featured Whiskeys'),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Highlighted bottles by positioning',
-                    style: textTheme.titleMedium
-                        ?.copyWith(color: AppColors.darkGreen),
-                  ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const _FeedMessage(
+              message: 'We could not load featured whiskeys.',
+            );
+          }
+
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+          final grouped = <String, List<_FeaturedWhiskeyData>>{
+            for (final label in _rarityCategories)
+              label: <_FeaturedWhiskeyData>[]
+          };
+
+          for (final doc in docs) {
+            final data = doc.data();
+            final isHighlighted = data['isHighlighted'] as bool? ?? false;
+            if (!isHighlighted) continue;
+            final rarityLabel =
+                _resolveRarity((data['rarityLevel'] as String? ?? '').trim());
+            if (rarityLabel == null) continue;
+            final list = grouped[rarityLabel]!;
+            if (list.length >= 4) continue;
+            list.add(_featuredWhiskeyDataFromMap(data, docId: doc.id));
+          }
+
+          return ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            children: [
+              Text(
+                'Highlighted bottles by rarity',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(color: AppColors.darkGreen),
+              ),
+              const SizedBox(height: 16),
+              for (final label in _rarityCategories)
+                _FeaturedWhiskeyCategoryRow(
+                  label: label,
+                  items: grouped[label] ?? const [],
+                  onUnfeature: _handleUnfeature,
+                  onAdd: _handleFeatureWhiskey,
+                  onTap: _showWhiskeyDetail,
                 ),
-                const SizedBox(width: 12),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.darkGreen, width: 1.2),
-                    color: AppColors.neutralLight,
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedPositioning,
-                      isDense: true,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      items: [
-                        for (final option in _positioningOptions)
-                          DropdownMenuItem(
-                            value: option,
-                            child: Text(option),
-                          ),
-                      ],
-                      onChanged: _handlePositioningChanged,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleUnfeature(_FeaturedWhiskeyData data) async {
+    final docId = data.id;
+    if (docId == null) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Remove from featured?'),
+            content: Text(
+              'Are you sure you want to remove ${data.title} from the featured list?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.leatherDark,
+                ),
+                child: const Text('Remove'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('whiskeys')
+          .doc(docId)
+          .update({'isHighlighted': false});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${data.title} removed from featured.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update: $e')),
+      );
+    }
+  }
+
+  Future<void> _handleFeatureWhiskey(String rarity) async {
+    final searchController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final query = FirebaseFirestore.instance
+            .collection('whiskeys')
+            .where('rarityLevel', isEqualTo: rarity);
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Feature $rarity whiskeys'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      decoration: const InputDecoration(
+                        hintText: 'Search whiskeys...',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: query.snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasError) {
+                            return const Center(
+                              child: Text('Unable to load whiskeys.'),
+                            );
+                          }
+                          if (snapshot.connectionState ==
+                                  ConnectionState.waiting &&
+                              !snapshot.hasData) {
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          }
+                          final docs = snapshot.data?.docs ?? [];
+                          if (docs.isEmpty) {
+                            return const Center(
+                              child: Text('No whiskeys found.'),
+                            );
+                          }
+                          final filter =
+                              searchController.text.trim().toLowerCase();
+                          final filteredDocs = filter.isEmpty
+                              ? docs
+                              : docs.where((doc) {
+                                  final data = doc.data();
+                                  final title = (data['name'] as String? ??
+                                          'Untitled Bottle')
+                                      .trim()
+                                      .toLowerCase();
+                                  final brand = (data['brand'] as String? ?? '')
+                                      .trim()
+                                      .toLowerCase();
+                                  return title.contains(filter) ||
+                                      brand.contains(filter);
+                                }).toList();
+                          if (filteredDocs.isEmpty) {
+                            return const Center(
+                              child: Text('No whiskeys match your search.'),
+                            );
+                          }
+                          return ListView.builder(
+                            itemCount: filteredDocs.length,
+                            itemBuilder: (context, index) {
+                              final doc = filteredDocs[index];
+                              final data = doc.data();
+                              final title =
+                                  (data['name'] as String? ?? 'Untitled Bottle')
+                                      .trim();
+                              final brand =
+                                  (data['brand'] as String? ?? '').trim();
+                              final alreadyFeatured =
+                                  (data['isHighlighted'] as bool? ?? false);
+                              final label =
+                                  brand.isEmpty ? title : '$title - $brand';
+                              final labelStyle = Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: alreadyFeatured
+                                        ? AppColors.neutralMid
+                                        : AppColors.leatherDark,
+                                  );
+                              return ListTile(
+                                dense: true,
+                                title: Text(label, style: labelStyle),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  color: alreadyFeatured
+                                      ? AppColors.neutralMid
+                                      : AppColors.darkGreen,
+                                  onPressed: alreadyFeatured
+                                      ? null
+                                      : () => _featureWhiskey(doc.id, title),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Close'),
                 ),
               ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Only whiskeys marked as highlighted appear in this list.',
-              style: textTheme.bodySmall
-                  ?.copyWith(color: AppColors.leatherDark.withOpacity(0.8)),
-            ),
+            );
+          },
+        );
+      },
+    );
+    searchController.dispose();
+  }
+
+  Future<void> _featureWhiskey(String docId, String title) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('whiskeys')
+          .doc(docId)
+          .update({'isHighlighted': true});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$title featured.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update: $e')),
+      );
+    }
+  }
+
+  void _showWhiskeyDetail(BuildContext context, _FeaturedWhiskeyData data) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _WhiskeyDetailSheet(data: data),
+    );
+  }
+
+  String? _resolveRarity(String raw) {
+    if (raw.isEmpty) return null;
+    final lower = raw.toLowerCase();
+    for (final label in _rarityCategories) {
+      if (label.toLowerCase() == lower) return label;
+    }
+    return null;
+  }
+}
+
+class _FeaturedWhiskeyCategoryRow extends StatelessWidget {
+  const _FeaturedWhiskeyCategoryRow({
+    required this.label,
+    required this.items,
+    required this.onUnfeature,
+    required this.onAdd,
+    this.onTap,
+  });
+
+  final String label;
+  final List<_FeaturedWhiskeyData> items;
+  final Future<void> Function(_FeaturedWhiskeyData data) onUnfeature;
+  final Future<void> Function(String rarity) onAdd;
+  final void Function(BuildContext context, _FeaturedWhiskeyData data)? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style:
+                textTheme.titleMedium?.copyWith(color: AppColors.leatherDark),
           ),
           const SizedBox(height: 12),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _GlobalWhiskeyFeed(positioning: _selectedPositioning),
+          SizedBox(
+            height: 120,
+            child: Row(
+              children: [
+                for (var index = 0; index < 4; index++) ...[
+                  Expanded(
+                    child: _FeaturedWhiskeySquare(
+                      data: index < items.length ? items[index] : null,
+                      onUnfeature: index < items.length
+                          ? () => onUnfeature(items[index])
+                          : null,
+                      onAdd: index >= items.length ? () => onAdd(label) : null,
+                      onTap: index < items.length && onTap != null
+                          ? () => onTap!(context, items[index])
+                          : null,
+                    ),
+                  ),
+                  if (index < 3) const SizedBox(width: 12),
+                ],
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _FeaturedWhiskeySquare extends StatelessWidget {
+  const _FeaturedWhiskeySquare(
+      {this.data, this.onUnfeature, this.onAdd, this.onTap});
+
+  final _FeaturedWhiskeyData? data;
+  final Future<void> Function()? onUnfeature;
+  final Future<void> Function()? onAdd;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(12);
+    Widget content;
+    if (data == null) {
+      content = Container(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          border: Border.all(color: AppColors.neutralMid),
+          color: AppColors.neutralLight,
+        ),
+        child: const Center(
+          child: Icon(Icons.local_drink_rounded, color: AppColors.neutralMid),
+        ),
+      );
+    } else {
+      final imageUrl = data!.imageUrl;
+      content = Container(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          color: AppColors.neutralLight,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: imageUrl == null || imageUrl.isEmpty
+            ? const Center(
+                child: Icon(Icons.local_drink_rounded,
+                    color: AppColors.leatherDark),
+              )
+            : Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image_outlined,
+                      color: AppColors.leatherDark),
+                ),
+              ),
+      );
+    }
+
+    Widget square = AspectRatio(
+      aspectRatio: 1,
+      child: Stack(
+        children: [
+          Positioned.fill(child: content),
+          if (data != null && onUnfeature != null)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => onUnfeature!(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.remove, size: 16, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          if (data == null && onAdd != null)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Material(
+                color: AppColors.darkGreen,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => onAdd!(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.add, size: 16, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (data == null && onAdd != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: borderRadius,
+          onTap: () => onAdd!(),
+          child: square,
+        ),
+      );
+    }
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: borderRadius,
+          onTap: onTap,
+          child: square,
+        ),
+      );
+    }
+
+    return square;
   }
 }
 
@@ -2137,9 +2490,15 @@ class _ArticleShowcaseCardData {
 }
 
 class _ArticleShowcaseCard extends StatelessWidget {
-  const _ArticleShowcaseCard({required this.data});
+  const _ArticleShowcaseCard({
+    required this.data,
+    this.isFavorited = false,
+    this.onToggleFavorite,
+  });
 
   final _ArticleShowcaseCardData data;
+  final bool isFavorited;
+  final Future<void> Function()? onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -2182,11 +2541,21 @@ class _ArticleShowcaseCard extends StatelessWidget {
               ],
             ),
           ),
-          if (data.actions.isNotEmpty)
+          if (onToggleFavorite != null)
+            IconButton(
+              icon: Icon(
+                isFavorited
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_outline_rounded,
+                color: isFavorited ? AppColors.leather : AppColors.leatherDark,
+              ),
+              onPressed: () => onToggleFavorite?.call(),
+            )
+          else if (data.actions.isNotEmpty)
             PopupMenuButton<_ShowcaseAction>(
-              tooltip: 'Actions',
+              tooltip: 'Save article',
               icon: const Icon(
-                Icons.more_horiz_rounded,
+                Icons.bookmark_outline_rounded,
                 color: AppColors.leatherDark,
               ),
               onSelected: (action) => action.onSelected(context),
@@ -2860,6 +3229,7 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
               .trim();
           items.add(
             _FeaturedWhiskeyData(
+              id: doc.id,
               title: data['name'] as String? ?? 'Untitled Bottle',
               brand: (data['brand'] as String? ?? '').trim(),
               category: (data['category'] as String? ??
@@ -2944,36 +3314,29 @@ class _GlobalWhiskeyFeed extends StatelessWidget {
 class _GlobalArticleFeed extends StatelessWidget {
   const _GlobalArticleFeed();
 
-  Future<void> _favoriteArticle(
-    BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) async {
-    final data = doc.data();
-    final service = UserLibraryService();
-    final rawTitle = (data['title'] as String? ?? 'Article').trim();
-    final resolvedTitle = rawTitle.isEmpty ? 'This article' : rawTitle;
-    try {
-      await service.addFavoriteArticle(
-        articleId: doc.id,
-        title: resolvedTitle,
-        category: data['category'] as String? ?? 'Story',
-        author: data['userName'] as String? ?? 'Contributor',
-      );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$resolvedTitle added to favorites.')),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Could not save: ${_resolveActionErrorMessage(e)}')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return _buildArticleList(context, const <String>{});
+    }
+    final favoritesStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('favoriteArticles')
+        .snapshots();
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: favoritesStream,
+      builder: (context, snapshot) {
+        final favoriteIds = snapshot.data == null
+            ? <String>{}
+            : snapshot.data!.docs.map((doc) => doc.id).toSet();
+        return _buildArticleList(context, favoriteIds);
+      },
+    );
+  }
+
+  Widget _buildArticleList(BuildContext context, Set<String> favorites) {
     final stream = FirebaseFirestore.instance
         .collection('articles')
         .orderBy('createdAt', descending: true)
@@ -3015,13 +3378,7 @@ class _GlobalArticleFeed extends StatelessWidget {
               author: (data['userName'] as String? ?? 'Contributor').trim(),
               badge: (data['membershipLevel'] as String?)?.trim(),
               iconUrl: (data['iconUrl'] as String?)?.trim(),
-              actions: [
-                _ShowcaseAction(
-                  label: 'Favorite article',
-                  icon: Icons.bookmark_add_outlined,
-                  onSelected: (ctx) => _favoriteArticle(ctx, doc),
-                ),
-              ],
+              actions: const [],
               onTap: markdownFilename.isEmpty
                   ? null
                   : () => _openArticleDetail(context, title, markdownFilename),
@@ -3030,16 +3387,63 @@ class _GlobalArticleFeed extends StatelessWidget {
         }
 
         final limitedCards = cards.take(3).toList();
+        final limitedDocs = docs.take(limitedCards.length).toList();
         return Column(
           children: [
             for (var i = 0; i < limitedCards.length; i++) ...[
-              _ArticleShowcaseCard(data: limitedCards[i]),
+              _ArticleShowcaseCard(
+                data: limitedCards[i],
+                isFavorited: favorites.contains(limitedDocs[i].id),
+                onToggleFavorite: () => _toggleFavoriteArticle(
+                  context,
+                  limitedDocs[i],
+                  favorites.contains(limitedDocs[i].id),
+                ),
+              ),
               if (i != limitedCards.length - 1) const SizedBox(height: 12),
             ],
           ],
         );
       },
     );
+  }
+
+  Future<void> _toggleFavoriteArticle(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    bool isFavorited,
+  ) async {
+    final data = doc.data();
+    final service = UserLibraryService();
+    final rawTitle = (data['title'] as String? ?? 'Article').trim();
+    final resolvedTitle = rawTitle.isEmpty ? 'This article' : rawTitle;
+    try {
+      if (isFavorited) {
+        await service.removeFavoriteArticle(doc.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$resolvedTitle removed from favorites.')),
+        );
+        return;
+      }
+      await service.addFavoriteArticle(
+        articleId: doc.id,
+        title: resolvedTitle,
+        category: data['category'] as String? ?? 'Story',
+        author: data['userName'] as String? ?? 'Contributor',
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$resolvedTitle added to favorites.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text('Could not update: ${_resolveActionErrorMessage(e)}')),
+      );
+    }
   }
 
   void _openArticleDetail(
@@ -3061,36 +3465,32 @@ class _GlobalArticleFeed extends StatelessWidget {
 class _GlobalDistilleryFeed extends StatelessWidget {
   const _GlobalDistilleryFeed();
 
-  Future<void> _favoriteDistillery(
-    BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) async {
-    final data = doc.data();
-    final service = UserLibraryService();
-    final rawName = (data['name'] as String? ?? 'Producer or Place').trim();
-    final resolvedName = rawName.isEmpty ? 'This producer or place' : rawName;
-    try {
-      await service.addFavoriteDistillery(
-        distilleryId: doc.id,
-        name: resolvedName,
-        location: data['location'] as String? ?? 'Unknown location',
-        signaturePour: data['signaturePour'] as String? ?? 'Signature pour',
-      );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$resolvedName added to favorites.')),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Could not save: ${_resolveActionErrorMessage(e)}')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return _buildDistilleryFeed(context, const <String>{});
+    }
+    final favoritesStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('favoriteDistilleries')
+        .snapshots();
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: favoritesStream,
+      builder: (context, snapshot) {
+        final favoriteIds = snapshot.data == null
+            ? <String>{}
+            : snapshot.data!.docs.map((doc) => doc.id).toSet();
+        return _buildDistilleryFeed(context, favoriteIds);
+      },
+    );
+  }
+
+  Widget _buildDistilleryFeed(
+    BuildContext context,
+    Set<String> favorites,
+  ) {
     final stream = FirebaseFirestore.instance
         .collection('distilleries')
         .orderBy('createdAt', descending: true)
@@ -3132,13 +3532,6 @@ class _GlobalDistilleryFeed extends StatelessWidget {
               type: typeLabel.isEmpty ? 'Producer or Place' : typeLabel,
               location: locationLabel,
               imageUrl: data['imageUrl'] as String?,
-              actions: [
-                _ShowcaseAction(
-                  label: 'Favorite producer/place',
-                  icon: Icons.star_border_rounded,
-                  onSelected: (ctx) => _favoriteDistillery(ctx, doc),
-                ),
-              ],
               shortDescription: (data['shortDescription'] as String? ??
                       'Details coming soon.')
                   .trim(),
@@ -3159,14 +3552,59 @@ class _GlobalDistilleryFeed extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => _ProducerPlaceCard(
-              data: items[index],
-              onTap: () => _showProducerDetail(context, items[index]),
-            ),
+            itemBuilder: (context, index) {
+              final doc = docs[index];
+              final isFavorited = favorites.contains(doc.id);
+              return _ProducerPlaceCard(
+                data: items[index],
+                onTap: () => _showProducerDetail(context, items[index]),
+                isFavorited: isFavorited,
+                onToggleFavorite: () =>
+                    _toggleFavoriteDistillery(context, doc, isFavorited),
+              );
+            },
           ),
         );
       },
     );
+  }
+
+  Future<void> _toggleFavoriteDistillery(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    bool isFavorited,
+  ) async {
+    final data = doc.data();
+    final service = UserLibraryService();
+    final rawName = (data['name'] as String? ?? 'Producer or Place').trim();
+    final resolvedName = rawName.isEmpty ? 'This producer or place' : rawName;
+    try {
+      if (isFavorited) {
+        await service.removeFavoriteDistillery(doc.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$resolvedName removed from favorites.')),
+        );
+        return;
+      }
+      await service.addFavoriteDistillery(
+        distilleryId: doc.id,
+        name: resolvedName,
+        location: data['location'] as String? ?? 'Unknown location',
+        signaturePour: data['signaturePour'] as String? ?? 'Signature pour',
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$resolvedName added to favorites.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update: ${_resolveActionErrorMessage(e)}'),
+        ),
+      );
+    }
   }
 
   void _showProducerDetail(
@@ -3181,5 +3619,3 @@ class _GlobalDistilleryFeed extends StatelessWidget {
     );
   }
 }
-
-

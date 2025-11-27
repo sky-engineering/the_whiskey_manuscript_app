@@ -78,6 +78,25 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
+  void _openSavedWhiskeyList(
+    BuildContext context, {
+    required String userId,
+    required String collectionName,
+    required String title,
+    required String emptyMessage,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _SavedWhiskeyListPage(
+          userId: userId,
+          collectionName: collectionName,
+          title: title,
+          emptyMessage: emptyMessage,
+        ),
+      ),
+    );
+  }
+
   void _openDistilleryDatabasePage(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -118,6 +137,22 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
+  void _openFavoriteDistilleriesPage(BuildContext context, String userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FavoriteDistilleriesPage(userId: userId),
+      ),
+    );
+  }
+
+  void _openFavoriteArticlesPage(BuildContext context, String userId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FavoriteArticlesPage(userId: userId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -150,6 +185,10 @@ class ProfilePage extends StatelessWidget {
             (userData['membershipLevel'] as String?) ?? membershipLevels.first;
         final membershipDescription =
             membershipDescriptions[membership] ?? 'Exclusive experiences.';
+        const collectionEmptyMessage =
+            'Your Library is blank.\nBrowse the Content tab and add your first entry.';
+        const wishlistEmptyMessage =
+            'Your Wishlist is empty.\nExplore the Content tab to plan your next pour.';
         final roleValue = (userData['role'] as String? ?? 'user').toLowerCase();
         final isAdmin = roleValue == 'admin';
         final email = user.email ?? 'No email available';
@@ -165,8 +204,6 @@ class ProfilePage extends StatelessWidget {
         final city = (userData['city'] as String?)?.trim();
         final region = (userData['region'] as String?)?.trim();
         final postalCode = (userData['postalCode'] as String?)?.trim();
-        final allowLocationBasedFeatures =
-            userData['allowLocationBasedFeatures'] as bool? ?? false;
         final birthYear = userData['birthYear'] as int?;
         final emailVerified =
             userData['emailVerified'] as bool? ?? user.emailVerified;
@@ -233,49 +270,55 @@ class ProfilePage extends StatelessWidget {
               city: city,
               region: region,
               postalCode: postalCode,
-              allowLocationBasedFeatures: allowLocationBasedFeatures,
               birthYear: birthYear,
               onSave: saveProfileData,
               onMembershipChanged: updateMembership,
             ),
             const SizedBox(height: 32),
             Text(
-              'Whiskey Collection',
+              'Collections & Favorites',
               style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
             ),
             const SizedBox(height: 12),
-            _UserSavedWhiskeyList(
-              userId: user.uid,
-              collectionName: 'whiskeyCollection',
-              emptyMessage:
-                  'Your Library is blank.\nBrowse the Content tab and add your first entry.',
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Whiskey Wishlist',
-              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
-            ),
-            const SizedBox(height: 12),
-            _UserSavedWhiskeyList(
-              userId: user.uid,
-              collectionName: 'whiskeyWishlist',
-              emptyMessage:
-                  'Your Wishlist is empty.\nExplore the Content tab to plan your next pour.',
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Favorite Producers and Places',
-              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            _ProfileCollectionLink(
+              icon: Icons.local_bar_rounded,
+              title: 'Whiskey Collection',
+              subtitle: 'See every bottle in your personal library.',
+              onTap: () => _openSavedWhiskeyList(
+                context,
+                userId: user.uid,
+                collectionName: 'whiskeyCollection',
+                title: 'Whiskey Collection',
+                emptyMessage: collectionEmptyMessage,
+              ),
             ),
             const SizedBox(height: 12),
-            _UserFavoriteDistilleriesList(userId: user.uid),
-            const SizedBox(height: 32),
-            Text(
-              'Favorite Articles',
-              style: textTheme.titleLarge?.copyWith(color: AppColors.darkGreen),
+            _ProfileCollectionLink(
+              icon: Icons.favorite_rounded,
+              title: 'Whiskey Wishlist',
+              subtitle: 'Plan the pours you still want to try.',
+              onTap: () => _openSavedWhiskeyList(
+                context,
+                userId: user.uid,
+                collectionName: 'whiskeyWishlist',
+                title: 'Whiskey Wishlist',
+                emptyMessage: wishlistEmptyMessage,
+              ),
             ),
             const SizedBox(height: 12),
-            _UserFavoriteArticlesList(userId: user.uid),
+            _ProfileCollectionLink(
+              icon: Icons.map_rounded,
+              title: 'Favorite Producers & Places',
+              subtitle: 'Keep track of the destinations you love most.',
+              onTap: () => _openFavoriteDistilleriesPage(context, user.uid),
+            ),
+            const SizedBox(height: 12),
+            _ProfileCollectionLink(
+              icon: Icons.article_rounded,
+              title: 'Favorite Articles',
+              subtitle: 'Revisit insights and stories that resonated.',
+              onTap: () => _openFavoriteArticlesPage(context, user.uid),
+            ),
             if (isAdmin) ...[
               const SizedBox(height: 32),
               Text(
@@ -399,4 +442,43 @@ class _PageLayout extends StatelessWidget {
   }
 }
 
+class _ProfileCollectionLink extends StatelessWidget {
+  const _ProfileCollectionLink({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        onTap: onTap,
+        leading: CircleAvatar(
+          backgroundColor: AppColors.neutralLight,
+          foregroundColor: AppColors.darkGreen,
+          child: Icon(icon),
+        ),
+        title: Text(
+          title,
+          style: textTheme.titleMedium?.copyWith(color: AppColors.darkGreen),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: textTheme.bodyMedium?.copyWith(color: AppColors.leatherDark),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded,
+            color: AppColors.leatherDark),
+      ),
+    );
+  }
+}

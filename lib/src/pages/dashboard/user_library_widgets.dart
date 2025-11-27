@@ -1,14 +1,80 @@
 part of 'package:the_whiskey_manuscript_app/main.dart';
 
-class _UserSavedWhiskeyList extends StatelessWidget {
-  const _UserSavedWhiskeyList({
+const double _kLibraryPreviewSize = 64;
+
+class _SavedWhiskeyImagePreview extends StatelessWidget {
+  const _SavedWhiskeyImagePreview({
+    this.imageUrl,
+    this.whiskeyId,
+  });
+
+  final String? imageUrl;
+  final String? whiskeyId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return _LibraryImageFrame(
+        size: _kLibraryPreviewSize,
+        child: Image.network(
+          imageUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              _libraryPlaceholderIcon(Icons.local_drink_rounded),
+        ),
+      );
+    }
+    if (whiskeyId == null || whiskeyId!.isEmpty) {
+      return _LibraryImageFrame(
+        size: _kLibraryPreviewSize,
+        child: _libraryPlaceholderIcon(Icons.local_drink_rounded),
+      );
+    }
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('whiskeys')
+          .doc(whiskeyId)
+          .get(),
+      builder: (context, snapshot) {
+        final url = (snapshot.data?.data()?['imageUrl'] as String?)?.trim();
+        if (url != null && url.isNotEmpty) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  _libraryPlaceholderIcon(Icons.local_drink_rounded),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasError) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: const _LibraryImageLoadingIndicator(),
+          );
+        }
+        return _LibraryImageFrame(
+          size: _kLibraryPreviewSize,
+          child: _libraryPlaceholderIcon(Icons.local_drink_rounded),
+        );
+      },
+    );
+  }
+}
+
+class _SavedWhiskeyListPage extends StatelessWidget {
+  const _SavedWhiskeyListPage({
     required this.userId,
     required this.collectionName,
+    required this.title,
     required this.emptyMessage,
   });
 
   final String userId;
   final String collectionName;
+  final String title;
   final String emptyMessage;
 
   @override
@@ -19,101 +85,161 @@ class _UserSavedWhiskeyList extends StatelessWidget {
         .collection(collectionName)
         .orderBy('addedAt', descending: true);
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const _FeedMessage(
-            message: 'We could not load your saved bottles.',
-          );
-        }
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: query.snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const _FeedMessage(
+              message: 'We could not load your saved bottles.',
+            );
+          }
 
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return _FeedMessage(message: emptyMessage);
-        }
+          final docs = snapshot.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return _FeedMessage(message: emptyMessage);
+          }
 
-        return Column(
-          children: [
-            for (final doc in docs)
-              Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  title: Text(
-                    doc.data()['name'] as String? ?? 'Whiskey',
-                    style: const TextStyle(color: AppColors.darkGreen),
+          final textTheme = Theme.of(context).textTheme;
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final doc = docs[index];
+              final data = doc.data();
+              final rawName = (data['name'] as String? ?? '').trim();
+              final name = rawName.isEmpty ? 'Whiskey' : rawName;
+              final subtitle = _savedWhiskeySubtitle(data);
+              final addedAt =
+                  _formatEventDate(_coerceTimestamp(data['addedAt']));
+              final imageUrl = (data['imageUrl'] as String?)?.trim();
+              final whiskeyId = (data['whiskeyId'] as String?)?.trim();
+              return Card(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _openWhiskeyDetail(
+                    context,
+                    whiskeyId: whiskeyId,
+                    fallbackData: data,
                   ),
-                  subtitle: Text(
-                    _buildSavedWhiskeySubtitle(doc.data()),
-                    style: const TextStyle(color: AppColors.leatherDark),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _formatEventDate(
-                            _coerceTimestamp(doc.data()['addedAt'])),
-                        style: const TextStyle(color: AppColors.leatherDark),
-                      ),
-                      IconButton(
-                        tooltip: 'Remove',
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        color: AppColors.leatherDark,
-                        onPressed: () => _removeSavedWhiskey(context, doc),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SavedWhiskeyImagePreview(
+                          imageUrl: imageUrl,
+                          whiskeyId: whiskeyId,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: textTheme.titleMedium
+                                    ?.copyWith(color: AppColors.darkGreen),
+                              ),
+                              if (subtitle != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  subtitle,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.leatherDark,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Text(
+                                'Added $addedAt',
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: AppColors.leatherDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove',
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          color: AppColors.leatherDark,
+                          onPressed: () => _removeSavedWhiskeyEntry(
+                            context,
+                            doc,
+                            collectionName,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
-  Future<void> _removeSavedWhiskey(
-    BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) async {
-    final rawName = (doc.data()['name'] as String? ?? '').trim();
-    final resolvedName = rawName.isEmpty ? 'this whiskey' : rawName;
-    final targetLabel =
-        collectionName == 'whiskeyWishlist' ? 'wishlist' : 'collection';
-    final confirmed = await _confirmDeletion(
-      context,
-      title: 'Remove whiskey',
-      message: 'Delete $resolvedName from your $targetLabel?',
-      confirmLabel: 'Remove',
+  void _openWhiskeyDetail(
+    BuildContext context, {
+    required String? whiskeyId,
+    required Map<String, dynamic> fallbackData,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _WhiskeyDetailPage(
+          whiskeyId: whiskeyId,
+          fallbackData: fallbackData,
+        ),
+      ),
     );
-    if (!confirmed || !context.mounted) return;
-    await _performDeletion(
-      context,
-      action: () => doc.reference.delete(),
-      successMessage: '$resolvedName removed from your $targetLabel.',
-    );
-  }
-
-  static String _buildSavedWhiskeySubtitle(Map<String, dynamic> data) {
-    final style = (data['style'] as String? ?? '').trim();
-    final region = (data['region'] as String? ?? '').trim();
-    final parts = [style, region].where((part) => part.isNotEmpty).toList();
-    if (parts.isEmpty) {
-      return 'Details coming soon';
-    }
-    return parts.join(' - ');
   }
 }
 
-class _UserFavoriteDistilleriesList extends StatelessWidget {
-  const _UserFavoriteDistilleriesList({required this.userId});
+String? _savedWhiskeySubtitle(Map<String, dynamic> data) {
+  final style = (data['style'] as String? ?? '').trim();
+  final region = (data['region'] as String? ?? '').trim();
+  final parts = [style, region].where((part) => part.isNotEmpty).toList();
+  if (parts.isEmpty) {
+    return null;
+  }
+  return parts.join(' - ');
+}
+
+Future<void> _removeSavedWhiskeyEntry(
+  BuildContext context,
+  QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  String collectionName,
+) async {
+  final rawName = (doc.data()['name'] as String? ?? '').trim();
+  final resolvedName = rawName.isEmpty ? 'this whiskey' : rawName;
+  final targetLabel =
+      collectionName == 'whiskeyWishlist' ? 'wishlist' : 'collection';
+  final confirmed = await _confirmDeletion(
+    context,
+    title: 'Remove whiskey',
+    message: 'Delete $resolvedName from your $targetLabel?',
+    confirmLabel: 'Remove',
+  );
+  if (!confirmed || !context.mounted) return;
+  await _performDeletion(
+    context,
+    action: () => doc.reference.delete(),
+    successMessage: '$resolvedName removed from your $targetLabel.',
+  );
+}
+
+class _FavoriteDistilleriesPage extends StatelessWidget {
+  const _FavoriteDistilleriesPage({required this.userId});
 
   final String userId;
 
@@ -125,54 +251,112 @@ class _UserFavoriteDistilleriesList extends StatelessWidget {
         .collection('favoriteDistilleries')
         .orderBy('addedAt', descending: true);
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const _FeedMessage(
-            message: 'We could not load favorite producers and places.',
-          );
-        }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Favorite Producers & Places')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: query.snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const _FeedMessage(
+              message: 'We could not load favorite producers and places.',
+            );
+          }
 
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const _FeedMessage(
-            message:
-                'Your Producers and Places list is blank.\nVisit the Content tab and mark your first favorite.',
-          );
-        }
+          final docs = snapshot.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const _FeedMessage(
+              message:
+                  'Your Producers and Places list is blank.\nVisit the Content tab and mark your first favorite.',
+            );
+          }
 
-        return Column(
-          children: [
-            for (final doc in docs)
-              Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  title: Text(
-                    doc.data()['name'] as String? ?? 'Producer or Place',
-                    style: const TextStyle(color: AppColors.darkGreen),
+          final textTheme = Theme.of(context).textTheme;
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final doc = docs[index];
+              final data = doc.data();
+              final name =
+                  (data['name'] as String? ?? 'Producer or Place').trim();
+              final subtitle = _buildFavoriteDistillerySubtitle(data);
+              final addedAt =
+                  _formatEventDate(_coerceTimestamp(data['addedAt']));
+              final imageUrl = (data['imageUrl'] as String?)?.trim();
+              return Card(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _openDistilleryDetail(
+                    context,
+                    distilleryId: doc.id,
+                    fallbackData: data,
                   ),
-                  subtitle: Text(
-                    _buildFavoriteDistillerySubtitle(doc.data()),
-                    style: const TextStyle(color: AppColors.leatherDark),
-                  ),
-                  trailing: Text(
-                    _formatEventDate(_coerceTimestamp(doc.data()['addedAt'])),
-                    style: const TextStyle(color: AppColors.leatherDark),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _FavoriteDistilleryImagePreview(
+                          distilleryId: doc.id,
+                          imageUrl: imageUrl,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name.isEmpty ? 'Producer or Place' : name,
+                                style: textTheme.titleMedium
+                                    ?.copyWith(color: AppColors.darkGreen),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: AppColors.leatherDark,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Added $addedAt',
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: AppColors.leatherDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _openDistilleryDetail(
+    BuildContext context, {
+    required String distilleryId,
+    required Map<String, dynamic> fallbackData,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FavoriteDistilleryDetailPage(
+          distilleryId: distilleryId,
+          fallbackData: fallbackData,
+        ),
+      ),
     );
   }
 
@@ -187,8 +371,8 @@ class _UserFavoriteDistilleriesList extends StatelessWidget {
   }
 }
 
-class _UserFavoriteArticlesList extends StatelessWidget {
-  const _UserFavoriteArticlesList({required this.userId});
+class _FavoriteArticlesPage extends StatelessWidget {
+  const _FavoriteArticlesPage({required this.userId});
 
   final String userId;
 
@@ -200,54 +384,108 @@ class _UserFavoriteArticlesList extends StatelessWidget {
         .collection('favoriteArticles')
         .orderBy('addedAt', descending: true);
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const _FeedMessage(
-            message: 'We could not load favorite articles.',
-          );
-        }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Favorite Articles')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: query.snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const _FeedMessage(
+              message: 'We could not load favorite articles.',
+            );
+          }
 
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const _FeedMessage(
-            message:
-                'Your Article Library is empty.\nFind something in Content and add it here.',
-          );
-        }
+          final docs = snapshot.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const _FeedMessage(
+              message:
+                  'Your Article Library is empty.\nFind something in Content and add it here.',
+            );
+          }
 
-        return Column(
-          children: [
-            for (final doc in docs)
-              Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  title: Text(
-                    doc.data()['title'] as String? ?? 'Article',
-                    style: const TextStyle(color: AppColors.darkGreen),
+          final textTheme = Theme.of(context).textTheme;
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final doc = docs[index];
+              final data = doc.data();
+              final rawTitle = (data['title'] as String? ?? '').trim();
+              final title = rawTitle.isEmpty ? 'Article' : rawTitle;
+              final subtitle = _buildFavoriteArticleSubtitle(data);
+              final addedAt =
+                  _formatEventDate(_coerceTimestamp(data['addedAt']));
+              return Card(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _openArticleDetail(
+                    context,
+                    articleId: doc.id,
+                    fallbackTitle: title,
                   ),
-                  subtitle: Text(
-                    _buildFavoriteArticleSubtitle(doc.data()),
-                    style: const TextStyle(color: AppColors.leatherDark),
-                  ),
-                  trailing: Text(
-                    _formatEventDate(_coerceTimestamp(doc.data()['addedAt'])),
-                    style: const TextStyle(color: AppColors.leatherDark),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _FavoriteArticleImagePreview(articleId: doc.id),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: textTheme.titleMedium
+                                    ?.copyWith(color: AppColors.darkGreen),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: AppColors.leatherDark,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Saved $addedAt',
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: AppColors.leatherDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _openArticleDetail(
+    BuildContext context, {
+    required String articleId,
+    required String fallbackTitle,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FavoriteArticleDetailLoader(
+          articleId: articleId,
+          fallbackTitle: fallbackTitle,
+        ),
+      ),
     );
   }
 
@@ -260,6 +498,701 @@ class _UserFavoriteArticlesList extends StatelessWidget {
     }
     return parts.join(' - ');
   }
+}
+
+class _WhiskeyDetailPage extends StatelessWidget {
+  const _WhiskeyDetailPage({
+    required this.fallbackData,
+    this.whiskeyId,
+  });
+
+  final Map<String, dynamic> fallbackData;
+  final String? whiskeyId;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmedId = whiskeyId?.trim();
+    if (trimmedId == null || trimmedId.isEmpty) {
+      return _WhiskeyDetailScaffold(data: fallbackData);
+    }
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('whiskeys')
+          .doc(trimmedId)
+          .get(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data();
+        final combined = {
+          ...fallbackData,
+          if (data != null) ...data,
+        };
+        if (snapshot.hasError && data == null) {
+          return _WhiskeyDetailScaffold(
+            data: combined,
+            errorMessage: 'We could not load the latest details.',
+          );
+        }
+        return _WhiskeyDetailScaffold(
+          data: combined,
+          isLoading: snapshot.connectionState == ConnectionState.waiting &&
+              data == null,
+        );
+      },
+    );
+  }
+}
+
+class _WhiskeyDetailScaffold extends StatelessWidget {
+  const _WhiskeyDetailScaffold({
+    required this.data,
+    this.isLoading = false,
+    this.errorMessage,
+  });
+
+  final Map<String, dynamic> data;
+  final bool isLoading;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = ((data['name'] as String?) ?? 'Whiskey').trim();
+    final imageUrl = (data['imageUrl'] as String?)?.trim();
+    final description = ((data['shortDescription'] as String?) ??
+            (data['notes'] as String?) ??
+            '')
+        .trim();
+    final tags = _coerceStringList(data['tags']);
+    final infoEntries = _buildWhiskeyEntries(data);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title.isEmpty ? 'Whiskey' : title),
+      ),
+      body: Column(
+        children: [
+          if (isLoading) const LinearProgressIndicator(minHeight: 3),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 200,
+                          color: AppColors.neutralLight,
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.image_not_supported,
+                              color: AppColors.leatherDark),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (errorMessage != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.leather.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        errorMessage!,
+                        style: const TextStyle(color: AppColors.leatherDark),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (description.isNotEmpty) ...[
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.4,
+                        color: AppColors.leatherDark,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  if (infoEntries.isNotEmpty) ...[
+                    for (final entry in infoEntries)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child:
+                            _DetailRow(label: entry.label, value: entry.value),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (tags.isNotEmpty) ...[
+                    const Text(
+                      'Tags',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.darkGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final tag in tags)
+                          Chip(
+                            label: Text(tag),
+                            backgroundColor: AppColors.neutralLight,
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_DetailEntry> _buildWhiskeyEntries(Map<String, dynamic> data) {
+    final entries = <_DetailEntry>[];
+    void addText(String label, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed == null || trimmed.isEmpty) return;
+      entries.add(_DetailEntry(label, trimmed));
+    }
+
+    String? formatNumber(num? value, {String suffix = ''}) {
+      if (value == null) return null;
+      final asDouble = value.toDouble();
+      final decimals = asDouble == asDouble.roundToDouble() ? 0 : 1;
+      return '${asDouble.toStringAsFixed(decimals)}$suffix';
+    }
+
+    addText('Brand', data['brand'] as String?);
+    addText('Category',
+        (data['category'] as String? ?? data['style'] as String?) ?? '');
+    addText('Subcategory', data['subCategory'] as String?);
+    addText(
+        'Region', (data['region'] as String?) ?? data['country'] as String?);
+    addText('Distillery', data['distilleryName'] as String?);
+    addText('Release Type', data['releaseType'] as String?);
+    addText('Age Statement', data['ageStatement'] as String?);
+    addText(
+        'Rarity', data['rarityLevel'] as String? ?? data['rarity'] as String?);
+    addText(
+        'Availability',
+        data['availabilityStatus'] as String? ??
+            data['availability'] as String?);
+    addText('Membership Tier', data['membershipLevel'] as String?);
+
+    final abvText = formatNumber(data['abv'] as num?, suffix: '% ABV');
+    addText('ABV', abvText);
+    final proofText = formatNumber(data['proof'] as num?);
+    addText('Proof', proofText);
+
+    final msrp = (data['msrp'] as num?)?.toDouble();
+    if (msrp != null) {
+      addText('MSRP', _formatCurrencyValue(msrp));
+    }
+    final priceLow = (data['priceLow'] as num?)?.toDouble();
+    final priceHigh = (data['priceHigh'] as num?)?.toDouble();
+    if (priceLow != null && priceHigh != null) {
+      addText('Typical Price',
+          '${_formatCurrencyValue(priceLow)} - ${_formatCurrencyValue(priceHigh)}');
+    }
+
+    return entries;
+  }
+}
+
+class _FavoriteDistilleryDetailPage extends StatelessWidget {
+  const _FavoriteDistilleryDetailPage({
+    required this.distilleryId,
+    required this.fallbackData,
+  });
+
+  final String distilleryId;
+  final Map<String, dynamic> fallbackData;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('distilleries')
+          .doc(distilleryId)
+          .get(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data();
+        final combined = {
+          ...fallbackData,
+          if (data != null) ...data,
+        };
+        if (snapshot.hasError && data == null) {
+          return _DistilleryDetailScaffold(
+            data: combined,
+            errorMessage: 'We could not load this producer right now.',
+          );
+        }
+        return _DistilleryDetailScaffold(
+          data: combined,
+          isLoading: snapshot.connectionState == ConnectionState.waiting &&
+              data == null,
+        );
+      },
+    );
+  }
+}
+
+class _DistilleryDetailScaffold extends StatelessWidget {
+  const _DistilleryDetailScaffold({
+    required this.data,
+    this.isLoading = false,
+    this.errorMessage,
+  });
+
+  final Map<String, dynamic> data;
+  final bool isLoading;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = ((data['name'] as String?) ?? 'Producer or Place').trim();
+    final imageUrl = (data['imageUrl'] as String?)?.trim();
+    final description = ((data['shortDescription'] as String?) ??
+            (data['story'] as String?) ??
+            '')
+        .trim();
+    final location = (data['location'] as String? ?? '').trim();
+    final styles = _coerceStringList(data['primaryStyles']);
+    final tags = _coerceStringList(data['tags']);
+    final signaturePour = (data['signaturePour'] as String?)?.trim();
+    final visitAble = data['isVisitAble'] as bool?;
+    final website = (data['websiteUrl'] as String?)?.trim();
+
+    final infoEntries = <_DetailEntry>[];
+    void addEntry(String label, String? value) {
+      final trimmed = value?.trim();
+      if (trimmed == null || trimmed.isEmpty) return;
+      infoEntries.add(_DetailEntry(label, trimmed));
+    }
+
+    addEntry('Type', data['type'] as String?);
+    addEntry('Location', location.isEmpty ? null : location);
+    addEntry('Signature Pour', signaturePour);
+    addEntry('Membership Tier', data['membershipLevel'] as String?);
+    if (visitAble != null) {
+      addEntry('Visitor Friendly', visitAble ? 'Yes' : 'Not yet');
+    }
+    if (website != null && website.isNotEmpty) {
+      addEntry('Website', website);
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(name.isEmpty ? 'Producer or Place' : name),
+      ),
+      body: Column(
+        children: [
+          if (isLoading) const LinearProgressIndicator(minHeight: 3),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 200,
+                          color: AppColors.neutralLight,
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.image_not_supported,
+                              color: AppColors.leatherDark),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (errorMessage != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.leather.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        errorMessage!,
+                        style: const TextStyle(color: AppColors.leatherDark),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (description.isNotEmpty) ...[
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.4,
+                        color: AppColors.leatherDark,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  if (styles.isNotEmpty) ...[
+                    const Text(
+                      'Primary Styles',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.darkGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final style in styles)
+                          Chip(
+                            label: Text(style),
+                            backgroundColor: AppColors.neutralLight,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (infoEntries.isNotEmpty) ...[
+                    for (final entry in infoEntries)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child:
+                            _DetailRow(label: entry.label, value: entry.value),
+                      ),
+                  ],
+                  if (tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tags',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.darkGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final tag in tags)
+                          Chip(
+                            label: Text(tag),
+                            backgroundColor: AppColors.neutralLight,
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FavoriteArticleDetailLoader extends StatelessWidget {
+  const _FavoriteArticleDetailLoader({
+    required this.articleId,
+    required this.fallbackTitle,
+  });
+
+  final String articleId;
+  final String fallbackTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('articles')
+          .doc(articleId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return Scaffold(
+            appBar: AppBar(title: Text(fallbackTitle)),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: Text(fallbackTitle)),
+            body: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('We could not load this article.'),
+              ),
+            ),
+          );
+        }
+        final data = snapshot.data?.data();
+        final markdown = (data?['markdownFilename'] as String?)?.trim();
+        final title = (data?['title'] as String? ?? fallbackTitle).trim();
+        if (markdown == null || markdown.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: Text(title.isEmpty ? fallbackTitle : title)),
+            body: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('This article is currently unavailable.'),
+              ),
+            ),
+          );
+        }
+        return ArticleDetailPage(
+          title: title.isEmpty ? fallbackTitle : title,
+          markdownFileName: markdown,
+        );
+      },
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 140,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkGreen,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(color: AppColors.leatherDark),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailEntry {
+  const _DetailEntry(this.label, this.value);
+
+  final String label;
+  final String value;
+}
+
+class _FavoriteDistilleryImagePreview extends StatelessWidget {
+  const _FavoriteDistilleryImagePreview({
+    required this.distilleryId,
+    this.imageUrl,
+  });
+
+  final String distilleryId;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return _LibraryImageFrame(
+        size: _kLibraryPreviewSize,
+        child: Image.network(
+          imageUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              _libraryPlaceholderIcon(Icons.map_rounded),
+        ),
+      );
+    }
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('distilleries')
+          .doc(distilleryId)
+          .get(),
+      builder: (context, snapshot) {
+        final url = (snapshot.data?.data()?['imageUrl'] as String?)?.trim();
+        if (url != null && url.isNotEmpty) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  _libraryPlaceholderIcon(Icons.map_rounded),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasError) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: const _LibraryImageLoadingIndicator(),
+          );
+        }
+        return _LibraryImageFrame(
+          size: _kLibraryPreviewSize,
+          child: _libraryPlaceholderIcon(Icons.map_rounded),
+        );
+      },
+    );
+  }
+}
+
+class _FavoriteArticleImagePreview extends StatelessWidget {
+  const _FavoriteArticleImagePreview({
+    required this.articleId,
+  });
+
+  final String articleId;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('articles')
+          .doc(articleId)
+          .get(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data();
+        final iconUrl = (data?['iconUrl'] as String?)?.trim();
+        final imageUrl = (data?['imageUrl'] as String?)?.trim();
+        final imagePath = (data?['imagePath'] as String?)?.trim();
+        if (iconUrl != null && iconUrl.isNotEmpty) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: Image.network(
+              iconUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  _libraryPlaceholderIcon(Icons.article_rounded),
+            ),
+          );
+        }
+        if (imageUrl != null && imageUrl.isNotEmpty) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  _libraryPlaceholderIcon(Icons.article_rounded),
+            ),
+          );
+        }
+        if (imagePath != null && imagePath.isNotEmpty) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: Image.asset(
+              imagePath,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  _libraryPlaceholderIcon(Icons.article_rounded),
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasError) {
+          return _LibraryImageFrame(
+            size: _kLibraryPreviewSize,
+            child: const _LibraryImageLoadingIndicator(),
+          );
+        }
+        return _LibraryImageFrame(
+          size: _kLibraryPreviewSize,
+          child: _libraryPlaceholderIcon(Icons.article_rounded),
+        );
+      },
+    );
+  }
+}
+
+class _LibraryImageFrame extends StatelessWidget {
+  const _LibraryImageFrame({required this.child, this.size = 64});
+
+  final Widget child;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: size,
+        height: size,
+        color: AppColors.neutralLight,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _LibraryImageLoadingIndicator extends StatelessWidget {
+  const _LibraryImageLoadingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+}
+
+Widget _libraryPlaceholderIcon(IconData icon) {
+  return Center(
+    child: Icon(
+      icon,
+      color: AppColors.leatherDark,
+      size: 28,
+    ),
+  );
+}
+
+List<String> _coerceStringList(dynamic raw) {
+  if (raw is Iterable) {
+    return raw
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+  return const [];
+}
+
+String _formatCurrencyValue(double value) {
+  final decimals = value == value.roundToDouble() ? 0 : 2;
+  return '\$${value.toStringAsFixed(decimals)}';
 }
 
 class _UserLookupSection extends StatefulWidget {

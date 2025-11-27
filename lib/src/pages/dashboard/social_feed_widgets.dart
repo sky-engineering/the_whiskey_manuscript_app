@@ -13,7 +13,6 @@ class _PostCard extends StatelessWidget {
     this.onShowLikes,
     this.onOpenComments,
     this.onAddFriend,
-    this.onDelete,
     this.onTap,
   });
 
@@ -28,7 +27,6 @@ class _PostCard extends StatelessWidget {
   final VoidCallback? onShowLikes;
   final VoidCallback? onOpenComments;
   final VoidCallback? onAddFriend;
-  final VoidCallback? onDelete;
   final VoidCallback? onTap;
 
   @override
@@ -89,15 +87,6 @@ class _PostCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onDelete != null)
-                  IconButton(
-                    onPressed: onDelete,
-                    tooltip: 'Delete',
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: AppColors.leatherDark,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -215,22 +204,16 @@ class _PostCard extends StatelessWidget {
 String _resolvePostAuthorName({
   String? firstName,
   String? lastName,
-  String? displayName,
   String? fallbackEmail,
 }) {
-  final parts = [firstName, lastName]
-      .map((part) => part?.trim())
-      .whereType<String>()
-      .where((value) => value.isNotEmpty)
-      .toList();
-  if (parts.isNotEmpty) {
-    return parts.join(' ');
+  final first = firstName?.trim() ?? '';
+  final last = lastName?.trim() ?? '';
+  if (first.isNotEmpty && last.isNotEmpty) {
+    return '$first $last';
   }
-  if (displayName != null && displayName.trim().isNotEmpty) {
-    return displayName.trim();
-  }
-  if (fallbackEmail != null && fallbackEmail.trim().isNotEmpty) {
-    return fallbackEmail.trim();
+  final email = fallbackEmail?.trim();
+  if (email != null && email.isNotEmpty) {
+    return email;
   }
   return 'Whiskey User';
 }

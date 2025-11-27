@@ -2,7 +2,7 @@ name: the_whiskey_manuscript_app
 description: The Whiskey Manuscript mobile app.
 publish_to: "none"
 
-version: 1.0.10
+version: 1.0.11
 
 environment:
   sdk: ^3.5.0

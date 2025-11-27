@@ -17,7 +17,6 @@ class _ProfileInfoCard extends StatefulWidget {
     required this.city,
     required this.region,
     required this.postalCode,
-    required this.allowLocationBasedFeatures,
     required this.birthYear,
     required this.onSave,
     required this.onMembershipChanged,
@@ -37,7 +36,6 @@ class _ProfileInfoCard extends StatefulWidget {
   final String? city;
   final String? region;
   final String? postalCode;
-  final bool allowLocationBasedFeatures;
   final int? birthYear;
   final Future<void> Function(Map<String, dynamic> data,
       {String? successMessage}) onSave;
@@ -56,7 +54,6 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   late final TextEditingController _birthYearController;
 
   String _countryCode = 'US';
-  bool _allowLocationFeatures = false;
   bool _isDirty = false;
   bool _isSaving = false;
 
@@ -97,8 +94,6 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
         oldWidget.region != widget.region ||
         oldWidget.postalCode != widget.postalCode ||
         oldWidget.countryCode != widget.countryCode ||
-        oldWidget.allowLocationBasedFeatures !=
-            widget.allowLocationBasedFeatures ||
         oldWidget.birthYear != widget.birthYear ||
         oldWidget.membership != widget.membership ||
         oldWidget.emailVerified != widget.emailVerified;
@@ -113,7 +108,6 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
     _birthYearController.text =
         widget.birthYear != null ? widget.birthYear.toString() : '';
     _countryCode = widget.countryCode;
-    _allowLocationFeatures = widget.allowLocationBasedFeatures;
     _isDirty = false;
     _isSaving = false;
     if (mounted) setState(() {});
@@ -122,6 +116,19 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   void _markDirty() {
     if (!_isDirty && mounted) {
       setState(() => _isDirty = true);
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await FirebaseAuth.instance.signOut();
+      navigator.pushNamedAndRemoveUntil('/', (route) => false);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not sign out: $e')),
+      );
     }
   }
 
@@ -135,7 +142,6 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
       'region': _regionController.text.trim(),
       'postalCode': _postalController.text.trim(),
       'countryCode': _countryCode,
-      'allowLocationBasedFeatures': _allowLocationFeatures,
     };
     final birthYearText = _birthYearController.text.trim();
     if (birthYearText.isNotEmpty) {
@@ -193,6 +199,13 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final baseNameStyle =
+        textTheme.titleMedium ?? const TextStyle(fontSize: 16);
+    final nameStyle = baseNameStyle.copyWith(
+      fontSize: (baseNameStyle.fontSize ?? 16) * 1.5,
+      color: AppColors.darkGreen,
+      fontWeight: FontWeight.w600,
+    );
     final nameParts = <String>[
       if (widget.firstName != null && widget.firstName!.trim().isNotEmpty)
         widget.firstName!.trim(),
@@ -231,10 +244,7 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
                     children: [
                       Text(
                         resolvedName,
-                        style: textTheme.titleMedium?.copyWith(
-                          color: AppColors.darkGreen,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: nameStyle,
                       ),
                       const SizedBox(height: 8),
                       TextButton(
@@ -255,11 +265,30 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        widget.membershipDescription,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: AppColors.leatherDark.withOpacity(0.8),
-                        ),
+                      Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Sign out',
+                            onPressed: _handleSignOut,
+                            icon: const Icon(Icons.logout_rounded),
+                          ),
+                          TextButton(
+                            onPressed: _handleSignOut,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              alignment: Alignment.centerLeft,
+                            ),
+                            child: Text(
+                              'Sign Out',
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: AppColors.leatherDark,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -267,18 +296,18 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
               ],
             ),
             const SizedBox(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            Row(
               children: [
                 _FollowerStat(
                   userId: widget.userId,
                   repository: widget.repository,
                 ),
+                const SizedBox(width: 16),
                 _FollowingStat(
                   userId: widget.userId,
                   repository: widget.repository,
                 ),
+                const SizedBox(width: 16),
                 _PostCountSummary(
                   userId: widget.userId,
                   repository: widget.repository,
@@ -287,9 +316,8 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
             ),
             const SizedBox(height: 16),
             _ProfileInfoRow(
-              label: 'Primary Email',
+              label: 'Email',
               value: widget.email,
-              allowCopy: true,
             ),
             const SizedBox(height: 16),
             Row(
@@ -314,6 +342,7 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _countryCode,
+              isDense: true,
               decoration: const InputDecoration(
                 labelText: 'Country',
                 border: OutlineInputBorder(),
@@ -348,21 +377,6 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
               label: 'Postal code',
               controller: _postalController,
               keyboardType: TextInputType.text,
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Allow location-based features'),
-              subtitle: const Text(
-                'Enables experiences tailored to your location.',
-              ),
-              value: _allowLocationFeatures,
-              onChanged: (value) {
-                setState(() {
-                  _allowLocationFeatures = value;
-                  _isDirty = true;
-                });
-              },
             ),
             const SizedBox(height: 12),
             _ProfileEditableField(
@@ -414,11 +428,22 @@ class _FollowerStat extends StatelessWidget {
       stream: repository.followersStream(userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const _ProfileStatChip(label: 'Followers unavailable');
+          return const _ProfileStatLabel(label: 'Followers unavailable');
         }
-        final count = snapshot.data?.docs.length ?? 0;
-        final label = count == 1 ? '1 follower' : ' followers';
-        return _ProfileStatChip(label: label);
+        final docs = snapshot.data?.docs ?? [];
+        final count = docs.length;
+        final label = count == 1 ? '1 follower' : '$count followers';
+        return _ProfileStatLabel(
+          label: label,
+          onTap: () => _showConnectionsSheet(
+            context,
+            title: 'Followers',
+            docs: docs,
+            emptyMessage: 'No one follows this member yet.',
+            showFollowActions: true,
+            currentUserId: userId,
+          ),
+        );
       },
     );
   }
@@ -439,11 +464,22 @@ class _FollowingStat extends StatelessWidget {
       stream: repository.followingStream(userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const _ProfileStatChip(label: 'Following unavailable');
+          return const _ProfileStatLabel(label: 'Following unavailable');
         }
-        final count = snapshot.data?.docs.length ?? 0;
-        final label = count == 1 ? '1 following' : ' following';
-        return _ProfileStatChip(label: label);
+        final docs = snapshot.data?.docs ?? [];
+        final count = docs.length;
+        final label = count == 1 ? '1 following' : '$count following';
+        return _ProfileStatLabel(
+          label: label,
+          onTap: () => _showConnectionsSheet(
+            context,
+            title: 'Following',
+            docs: docs,
+            emptyMessage: 'This member is not following anyone yet.',
+            showUnfollowActions: true,
+            currentUserId: userId,
+          ),
+        );
       },
     );
   }
@@ -464,40 +500,370 @@ class _PostCountSummary extends StatelessWidget {
       stream: repository.userPostsStream(userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const _ProfileStatChip(label: 'Posts unavailable');
+          return const _ProfileStatLabel(label: 'Posts unavailable');
         }
         final count = snapshot.data?.docs.length ?? 0;
-        final label = count == 1 ? '1 post' : ' posts';
-        return _ProfileStatChip(label: label);
+        final label = count == 1 ? '1 post' : '$count posts';
+        return _ProfileStatLabel(label: label);
       },
     );
   }
 }
 
-class _ProfileStatChip extends StatelessWidget {
-  const _ProfileStatChip({
+Future<void> _showConnectionsSheet(
+  BuildContext context, {
+  required String title,
+  required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  required String emptyMessage,
+  bool showFollowActions = false,
+  bool showUnfollowActions = false,
+  String? currentUserId,
+}) async {
+  final entries = docs.map(_ProfileConnectionEntry.fromSnapshot).toList()
+    ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final friendService = FriendService();
+  final pendingUserIds = <String>{};
+  var allowFollowActions = showFollowActions && currentUserId != null;
+  var allowUnfollowActions = showUnfollowActions && currentUserId != null;
+  var followingIds = <String>{};
+  var searchQuery = '';
+
+  if (allowUnfollowActions) {
+    followingIds = entries.map((entry) => entry.userId).toSet();
+  }
+
+  if (allowFollowActions) {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .collection('following')
+          .get();
+      followingIds = snapshot.docs.map((doc) => doc.id).toSet();
+    } catch (e) {
+      allowFollowActions = false;
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not load following data: $e')),
+      );
+    }
+  }
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      final surfaceColor = Theme.of(sheetContext).colorScheme.surface;
+      return FractionallySizedBox(
+        heightFactor: 0.5,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: Material(
+            color: surfaceColor,
+            child: SafeArea(
+              top: false,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  final followLabelStyle =
+                      Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: AppColors.neutralMid.withOpacity(0.6),
+                              ) ??
+                          TextStyle(
+                            color: AppColors.neutralMid.withOpacity(0.6),
+                          );
+                  final filteredEntries = searchQuery.isEmpty
+                      ? entries
+                      : entries
+                          .where((entry) =>
+                              entry.title.toLowerCase().contains(searchQuery))
+                          .toList();
+                  return Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.neutralMid,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(color: AppColors.darkGreen),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Close',
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (entries.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                          child: TextField(
+                            decoration: InputDecoration(
+                              hintText: 'Search members...',
+                              prefixIcon: const Icon(Icons.search),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              isDense: true,
+                            ),
+                            onChanged: (value) => setState(
+                              () => searchQuery = value.trim().toLowerCase(),
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: entries.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 24),
+                                  child: Text(
+                                    emptyMessage,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              )
+                            : filteredEntries.isEmpty
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 24),
+                                      child: Text(
+                                        'No members match your search.',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    physics: const BouncingScrollPhysics(),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 8,
+                                    ),
+                                    itemCount: filteredEntries.length,
+                                    itemBuilder: (_, index) {
+                                      final entry = filteredEntries[index];
+                                      final alreadyFollowing =
+                                          followingIds.contains(entry.userId);
+                                      final canFollow = allowFollowActions &&
+                                          entry.userId != currentUserId;
+                                      final isPending =
+                                          pendingUserIds.contains(entry.userId);
+                                      Widget? trailing;
+                                      if (allowUnfollowActions &&
+                                          alreadyFollowing) {
+                                        trailing = TextButton(
+                                          onPressed: isPending ||
+                                                  entry.userId == currentUserId
+                                              ? null
+                                              : () async {
+                                                  setState(() {
+                                                    pendingUserIds
+                                                        .add(entry.userId);
+                                                  });
+                                                  try {
+                                                    await friendService
+                                                        .removeFriend(
+                                                            entry.userId);
+                                                    setState(() {
+                                                      pendingUserIds
+                                                          .remove(entry.userId);
+                                                      followingIds
+                                                          .remove(entry.userId);
+                                                      entries.removeWhere(
+                                                        (item) =>
+                                                            item.userId ==
+                                                            entry.userId,
+                                                      );
+                                                    });
+                                                    messenger?.showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Unfollowed ${entry.title}.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } catch (e) {
+                                                    setState(() {
+                                                      pendingUserIds
+                                                          .remove(entry.userId);
+                                                    });
+                                                    messenger?.showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Unable to unfollow: $e',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                          child: isPending
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
+                                                )
+                                              : const Text('Unfollow'),
+                                        );
+                                      } else if (canFollow &&
+                                          !alreadyFollowing) {
+                                        trailing = TextButton(
+                                          onPressed: isPending
+                                              ? null
+                                              : () async {
+                                                  setState(() {
+                                                    pendingUserIds
+                                                        .add(entry.userId);
+                                                  });
+                                                  try {
+                                                    await friendService
+                                                        .addFriend(
+                                                            entry.userId);
+                                                    setState(() {
+                                                      pendingUserIds
+                                                          .remove(entry.userId);
+                                                      followingIds
+                                                          .add(entry.userId);
+                                                    });
+                                                    messenger?.showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Now following ${entry.title}.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } catch (e) {
+                                                    setState(() {
+                                                      pendingUserIds
+                                                          .remove(entry.userId);
+                                                    });
+                                                    messenger?.showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Unable to follow: $e',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                          child: isPending
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
+                                                )
+                                              : const Text('Follow'),
+                                        );
+                                      } else if (alreadyFollowing) {
+                                        trailing = Text(
+                                          'Following',
+                                          style: followLabelStyle,
+                                        );
+                                      }
+                                      return ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(entry.title),
+                                        trailing: trailing,
+                                      );
+                                    },
+                                    separatorBuilder: (_, __) =>
+                                        const Divider(height: 12),
+                                  ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _ProfileConnectionEntry {
+  const _ProfileConnectionEntry({
+    required this.userId,
+    required this.title,
+  });
+
+  final String userId;
+  final String title;
+
+  factory _ProfileConnectionEntry.fromSnapshot(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final displayName = (data['displayName'] as String?)?.trim();
+    final email = (data['email'] as String?)?.trim();
+
+    final resolvedTitle = (displayName != null && displayName.isNotEmpty)
+        ? displayName
+        : (email != null && email.isNotEmpty)
+            ? email
+            : doc.id;
+
+    return _ProfileConnectionEntry(
+      userId: doc.id,
+      title: resolvedTitle,
+    );
+  }
+}
+
+class _ProfileStatLabel extends StatelessWidget {
+  const _ProfileStatLabel({
     required this.label,
+    this.onTap,
   });
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: AppColors.neutralLight,
-        border: Border.all(
-          color: AppColors.darkGreen.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.darkGreen,
-          fontWeight: FontWeight.w600,
-        ),
+    final text = Text(
+      label,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.leatherDark, fontWeight: FontWeight.w600) ??
+          const TextStyle(
+              color: AppColors.leatherDark, fontWeight: FontWeight.w600),
+    );
+
+    if (onTap == null) return text;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: text,
       ),
     );
   }
@@ -577,8 +943,7 @@ class _ProfileEditableField extends StatelessWidget {
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
     );
   }
@@ -698,8 +1063,8 @@ class _MembershipManagementPageState extends State<MembershipManagementPage> {
                             width: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
                         : const Text('Save changes'),
